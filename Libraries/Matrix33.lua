@@ -41,6 +41,43 @@ Matrix33 = {
 	end,
 	---@endsection
 
+	---@section Matrix33_fromDirectionVector
+	---@param dir LBVec  # A normalized direction vector
+	---@param up LBVec?  # A normalized direction vector
+	---@return Matrix33
+	---@nodiscard
+	Matrix33_fromDirectionVector = function(self, dir, up)
+		up = up or LBVec:new(0, 1, 0)
+		local xaxis = up:lbvec_cross(dir)
+		local yaxis = dir:lbvec_cross(xaxis)
+		return Matrix33:new({
+			xaxis.x, yaxis.x, dir.x,
+			xaxis.y, yaxis.y, dir.y,
+			xaxis.z, yaxis.z, dir.z,
+		})
+	end,
+	---@endsection
+
+	---@section Matrix33_fromAxisAngle
+	---@param axis LBVec  # A normalized axis
+	---@param angle number
+	---@return Matrix33
+	---@nodiscard
+	Matrix33_fromAxisAngle = function(self, axis, angle)
+		local c, s, t = math.cos(angle), math.sin(angle), 1.0 - math.cos(angle)
+
+		local t11, t12 = axis.x*axis.y*t, axis.z*s
+		local t21, t22 = axis.x*axis.z*t, axis.y*s
+		local t31, t32 = axis.y*axis.z*t, axis.x*s
+
+		return Matrix33:new({
+			c + axis.x*axis.x*t, t11 + t12, t21 - t22,
+			t11 - t12, c + axis.y*axis.y*t, t31 + t32,
+			t21 + t22, t31 - t32, c + axis.z*axis.z*t,
+		})
+	end,
+	---@endsection
+
 	---@section Matrix33_fromEuler
 	---@param euler LBVec
 	---@return Matrix33

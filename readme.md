@@ -1,9 +1,10 @@
 # AvrilsSWTools
-A collection of tools for developing Stormworks addons and micro controllers.
+A collection of tools for developing StormWorks addons and micro controllers.  
 
 ## `Libraries/`
-Collection of code for micro controllers.  
+Collection of code for micro-controllers.  
 Most files are self-explanatory.  
+
 
 ## `AutoVehicleUpdater/`
 A `_buildactions.lua` tool to automatically update code in a vehicle file.  
@@ -11,7 +12,7 @@ Upon building once, `_build/update_vehicle_config.lua` will be generated.
 Getting the lua node id can be tricky, see config example below, as this will automatically list them for you.  
 Setup:  
 ```lua
-package.path = package.path .. ";../AvrilsSWTools/AutoVehicleUpdater/?.lua;"
+package.path = package.path .. ";../AvrilsSWTools/AutoVehicleUpdater/?.lua"
 
 ---@param builder Builder           builder object that will be used to build each file
 ---@param params MinimizerParams    params that the build process usees to control minification settings
