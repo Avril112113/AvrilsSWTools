@@ -120,6 +120,9 @@ return function(builder, params, workspaceRoot)
 
 			for nodeXML, tag, nodeID in microControllerXML:gmatch("((<c type=\"56\">.-<object id=\"(%d+)\").-</object>.-</c>)") do
 				nodeID = tonumber(nodeID)
+				if nodeID == nil then
+					goto continue
+				end
 				local sourceFileName = microcontroller[nodeID]
 				if type(sourceFileName) ~= "string" then
 					microcontroller[nodeID] = false

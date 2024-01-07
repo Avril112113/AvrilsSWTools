@@ -1,6 +1,10 @@
 # AvrilsSWTools
 A collection of tools for developing StormWorks addons and micro controllers.  
 
+Any folders starting with `CodeGen` may modify the source file to provide it's feature.  
+Ensure there is a backup (like using git) before using these, in the case of code generation bugs.  
+
+
 ## `Libraries/`
 Collection of code for micro-controllers.  
 Most files are self-explanatory.  
@@ -43,4 +47,57 @@ return
 		...
 	}
 }
+```
+
+
+## `AddonUpdater`
+Used to automatically update addon's `script.lua` upon building.  
+Usage:  
+```lua
+package.path = package.path .. ";../AvrilsSWTools/AddonUpdater/?.lua"
+local update_addon = require "update_addon"
+
+---@param builder Builder
+---@param params MinimizerParams
+---@param workspaceRoot Filepath
+function onLBBuildComplete(builder, params, workspaceRoot)
+	-- Providing an empty table will use the defaults as described below.
+	update_addon(builder, workspaceRoot, {})
+
+	update_addon(builder, workspaceRoot, {
+		-- Path of the missions folder, defaults to '%appdata%/Stormworks/data/missions'
+		missions_path = "SomePath/Stormworks/data/missions",
+		-- name of the addon in the missions folder, defaults to the name of root folder.
+		addon_name = "MyAwesomeAddon",
+		-- file to use to update addon script, defaults to "script.lua".
+		script_file = "alternate_script.lua",
+	})
+end
+```
+
+
+## `CodeGen_RequireFolder`
+Generates a `require()` call for every lua file (or folder with `init.lua`).  
+As the name implies, this is using code generation and does modify the source file!  
+Usage:  
+```lua
+package.path = package.path .. ";../AvrilsSWTools/AddonUpdater/?.lua"
+local update_addon = require "update_addon"
+
+---@param builder Builder
+---@param params MinimizerParams
+---@param workspaceRoot Filepath
+function onLBBuildComplete(builder, params, workspaceRoot)
+	-- Providing an empty table will use the defaults as described below.
+	update_addon(builder, workspaceRoot, {})
+
+	update_addon(builder, workspaceRoot, {
+		-- Path of the missions folder, defaults to '%appdata%/Stormworks/data/missions'
+		missions_path = "SomePath/Stormworks/data/missions",
+		-- name of the addon in the missions folder, defaults to the name of root folder.
+		addon_name = "MyAwesomeAddon",
+		-- file to use to update addon script, defaults to "script.lua".
+		script_file = "alternate_script.lua",
+	})
+end
 ```
