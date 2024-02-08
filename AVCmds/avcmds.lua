@@ -550,7 +550,6 @@ function AVCmds.const(tbl)
 		usage=tbl.usage or ("'%s'"):format(tbl[1]),
 		help=tbl.help,
 		match=function(self, raw, pos, cut)
-			print(tbl[1], pos)
 			local match, cut_value, finish = raw:match(pattern .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
 			if match then
 				---@type AVMatchValue
@@ -1031,9 +1030,6 @@ function AVCmds.position(tbl)
 				local result_x = matcher_number:match(raw, pos, " *[ ,] *")
 				local result_y = not result_x.err and matcher_number:match(raw, result_x.finish, " *[ ,] *")
 				local result_z = result_y and not result_y.err and matcher_number:match(raw, result_y.finish, cut)
-				print("!!!!!A", raw:sub(pos))
-				print("!!!!!B", raw:sub(result_x.finish or -1))
-				print("!!!!!C", raw:sub(result_y and result_y.finish or -1))
 				if result_x.value and result_y and result_y.value and result_z and result_z.value then
 					result = result_z
 					position = {result_x.value, result_y.value, result_z.value}
