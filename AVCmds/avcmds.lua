@@ -17,10 +17,7 @@
 --[[ Grand TODO list:
 	Remove all TODO's within the code.
 	Solve all FIXME's within the code.
-	Handler return matcher type errors, for custom handling.
 	Add lua path matcher, eg, for savedata command "foo.bar[123]['baz bee']"
-	Support INF & NAN.
-	Support multi-line strings [=[ ]=].
 ]]
 
 
