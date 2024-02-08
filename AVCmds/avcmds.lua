@@ -19,6 +19,7 @@
 	Solve all FIXME's within the code.
 	Handler return matcher type errors, for custom handling.
 	Add lua path matcher, eg, for savedata command "foo.bar[123]['baz bee']"
+	Support octal, binary and hexedecimal numbers.
 ]]
 
 
@@ -408,16 +409,17 @@ function AVCmds.createCommand(tbl)
 					return hanled, ctx
 				end
 			else
+				local pos_parse = pos
 				---@cast handler AVCommandHandlerTbl
-				local ctx = self:_create_context({handler=handler, pos=pos}, parent_ctx)
+				local ctx = self:_create_context({handler=handler, pos=pos_parse}, parent_ctx)
 				parent_ctx.children[handler] = ctx
 				parent_ctx.children_order[handler_index] = handler
 				-- Check all positional arguments
-				for i,_ in pairs(handler) do
+				for i, _ in pairs(handler) do
 					AVCmds.assert(type(i) == "number", "non-positionals are not yet supported.")
 				end
 				for i=1,#handler-1 do
-					local match = handler[i]:match(raw, pos)
+					local match = handler[i]:match(raw, pos_parse)
 					ctx.argsData[i] = match
 					if match.err ~= nil then
 						---@cast match AVMatchError
@@ -426,16 +428,16 @@ function AVCmds.createCommand(tbl)
 					end
 					---@cast match AVMatchValue
 					ctx.args[i] = match.value
-					pos = raw:match("^ *()", match.finish)  -- Ensure all spaces are consumed
-					ctx.finish = pos
+					pos_parse = raw:match("^ *()", match.finish)  -- Ensure all spaces are consumed
+					ctx.finish = pos_parse
 				end
 				local handle = handler[#handler]
 				if type(handle) == "function" then
 					-- Check that all input has been consumed before running the handler function.
-					if pos < #raw then
+					if pos_parse < #raw then
 						ctx.err = {
-							matcher=nil, pos=pos, err=AVCmds.MATCH_ERRORS.EXCESS_INPUT,
-							msg=("Excess input at position %.0f"):format(pos),
+							matcher=nil, pos=pos_parse, err=AVCmds.MATCH_ERRORS.EXCESS_INPUT,
+							msg=("Excess input at position %.0f"):format(pos_parse),
 						}
 						goto continue
 					end
@@ -447,7 +449,7 @@ function AVCmds.createCommand(tbl)
 						goto continue
 					end
 				elseif handle.__name == "AVCommand" then
-					return handle:_handle(ctx, raw, pos)
+					return handle:_handle(ctx, raw, pos_parse)
 				else
 					AVCmds.assert(false, "Was not function or AVCommand?! (This is a AVCmds bug)")
 				end
@@ -549,6 +551,7 @@ function AVCmds.const(tbl)
 		usage=tbl.usage or ("'%s'"):format(tbl[1]),
 		help=tbl.help,
 		match=function(self, raw, pos, cut)
+			print(tbl[1], pos)
 			local match, cut_value, finish = raw:match(pattern .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
 			if match then
 				---@type AVMatchValue
@@ -597,7 +600,7 @@ function AVCmds.string(tbl)
 			elseif tbl.strict ~= true then
 				match, cut_value, finish = raw:match(pattern_simple .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
 				if match == nil then
-					msg = "Failed to match non-quoted string."
+					msg = "Failed to match string."
 				else
 					value = match
 				end
@@ -1010,14 +1013,13 @@ function AVCmds.optional(matcher)
 	}
 end
 
----@param ... AVMatcher
+---@param tbl {[integer]:AVMatcher,help:string?,usage:string?}
 ---@return AVMatcher
-function AVCmds.or_(...)
-	local matchers = {...}
-	AVCmds.assert(#matchers >= 2, "AVCmds.or_ requires 2 or more matchers.")
+function AVCmds.or_(tbl)
+	AVCmds.assert(#tbl >= 2, "AVCmds.or_ requires 2 or more matchers.")
 	local usage_parts = {}
 	local help_parts = {}
-	for _, matcher in ipairs(matchers) do
+	for _, matcher in ipairs(tbl) do
 		if matcher.usage then
 			table.insert(usage_parts, matcher.usage)
 		end
@@ -1027,11 +1029,11 @@ function AVCmds.or_(...)
 	end
 	---@type AVMatcher
 	return {
-		usage=table.concat(usage_parts, "\n"),
-		help=table.concat(help_parts, "\n\n"),
+		usage=tbl.usage or ("(%s)"):format(table.concat(usage_parts, "|")),
+		help=tbl.help or table.concat(help_parts, "\n\n"),
 		match=function(self, raw, pos, cut)
 			local msgs = {}
-			for _, matcher in ipairs(matchers) do
+			for _, matcher in ipairs(tbl) do
 				local result = matcher:match(raw, pos, cut)
 				if not result.err then
 					return result
