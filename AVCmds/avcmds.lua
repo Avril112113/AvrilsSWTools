@@ -19,7 +19,9 @@
 	Solve all FIXME's within the code.
 	Handler return matcher type errors, for custom handling.
 	Add lua path matcher, eg, for savedata command "foo.bar[123]['baz bee']"
-	Support octal, binary and hexedecimal numbers.
+	Test octal, binary and hexedecimal numbers.
+	Support INF & NAN.
+	Support multi-line strings [=[ ]=].
 ]]
 
 
@@ -113,6 +115,7 @@ AVCmds.MATCH_ERRORS = {
 	BAD_TABLE="BAD_TABLE",
 	BAD_TABLE_COUNT="BAD_TABLE_COUNT",
 	BAD_PLAYER="BAD_PLAYER",
+	BAD_POSITION="BAD_POSITION",
 	OR_FAILED="OR_FAILED",
 	UNKNOWN="UNKNOWN",
 }
@@ -645,7 +648,7 @@ function AVCmds.number(tbl)
 	-- elseif tbl.max then
 	-- 	type_name = ("number(..%s)"):format(tbl.max)
 	-- end
-	local pattern_simple = "^([^ ]+)"
+	local pattern_simple = "^([^ ]-)"
 	---@type AVMatcher
 	return {
 		usage=tbl.usage or "number",
@@ -990,6 +993,57 @@ function AVCmds.player(tbl)
 			end
 			---@type AVMatchValue
 			return {matcher=self, start=pos, finish=result.finish, raw=raw, cut=result.cut, value=player}
+		end,
+	}
+end
+
+---@param tbl {help:string,usage:string?}?
+---@return AVMatcher
+function AVCmds.position(tbl)
+	tbl = tbl or {}
+	local matcher_player = AVCmds.player{help=tbl.help,usage=tbl.usage}
+	local matcher_number = AVCmds.number{help=tbl.help,usage=tbl.usage}
+	---@type AVMatcher
+	return {
+		usage=tbl.usage or "position",
+		help=tbl.help,
+		match=function(self, raw, pos, cut)
+			---@type {[1]:number,[2]:number,[3]:number}
+			local position
+			---@type AVMatchValue
+			local result
+
+			if position == nil then
+				local result_x = matcher_number:match(raw, pos, " *[ ,] *")
+				local result_y = not result_x.err and matcher_number:match(raw, result_x.finish, " *[ ,] *")
+				local result_z = result_y and not result_y.err and matcher_number:match(raw, result_y.finish, cut)
+				print("!!!!!A", raw:sub(pos))
+				print("!!!!!B", raw:sub(result_x.finish or -1))
+				print("!!!!!C", raw:sub(result_y and result_y.finish or -1))
+				if result_x.value and result_y and result_y.value and result_z and result_z.value then
+					result = result_z
+					position = {result_x.value, result_y.value, result_z.value}
+				end
+			end
+			-- Ensure that it's not gonna be a peer_id, but do allow steam id's (17 digits)
+			if position == nil and (not raw:match("^%d", pos) or raw:match("^%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d", pos)) then
+				local _result = matcher_player:match(raw, pos, cut)
+				if not _result.err then
+					local m = server.getPlayerPos(_result.value.id)
+					---@cast _result -AVMatchError
+					result = _result
+					position = {m[13],m[14],m[15]}
+				end
+			end
+			if position == nil then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_POSITION,
+					msg=("Invalid position, spesify a x,y,z or player."),
+				}
+			end
+			---@type AVMatchValue
+			return {matcher=self, start=pos, finish=result.finish, raw=raw, cut=result.cut, value=position}
 		end,
 	}
 end

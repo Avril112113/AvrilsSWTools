@@ -41,6 +41,18 @@ function server.getAddonData(index)
 	}
 end
 
+---@return SWMatrix
+function server.getPlayerPos(peerID)
+	math.randomseed(9253986135, peerID)
+	return {
+		-- Can't be bothered to figure out reasonable values for all these.
+		0, 0, 0, 0,
+		0, 0, 0, 0,
+		0, 0, 0, 0,
+		math.random(-10000, 10000), math.random(-10000, 10000), math.random(-10000, 10000), 0
+	}
+end
+
 --- @param name string The display name of the user sending the message
 --- @param message string The message to send the player(s)
 --- @param peerID number|nil The peerID of the player you want to message. -1 messages all players. If ignored, it will message all players

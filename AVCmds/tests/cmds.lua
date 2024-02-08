@@ -365,6 +365,44 @@ TEST.addTest("matchers-player", function()
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_PLAYER}, AVCmds.onCustomCommand("?test 12345678901234567", 0)))
 end)
 
+TEST.addTest("matchers-position", function()
+	---@param m SWMatrix
+	---@return {[1]:number,[2]:number,[3]:number}
+	local function mtp(m)
+		return {m[13], m[14], m[15]}
+	end
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.position(),
+			---@param ctx AVCommandContext
+			function(ctx, ...)
+				print("~ arg test position")
+				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
+				for i, v in pairs({...}) do
+					print(i, Utils.str_value(v))
+				end
+			end
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(0))}}, AVCmds.onCustomCommand("?test Avril112113", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(0))}}, AVCmds.onCustomCommand("?test 76561198111587390", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(1))}}, AVCmds.onCustomCommand("?test Foo", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(1))}}, AVCmds.onCustomCommand("?test 60638742392402103", 0)))
+
+	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_POSITION}, AVCmds.onCustomCommand("?test 0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_POSITION}, AVCmds.onCustomCommand("?test 1", 0)))
+
+	TEST.check(Utils.cmd_expect({handled=true, args={{1,2,3}}}, AVCmds.onCustomCommand("?test 1,2,3", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{1,2,3}}}, AVCmds.onCustomCommand("?test 1 2 3", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{1,2,3}}}, AVCmds.onCustomCommand("?test 1, 2, 3", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{1,2,3}}}, AVCmds.onCustomCommand("?test 1  2  3", 0)))
+
+	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_POSITION}, AVCmds.onCustomCommand("?test 1,2,", 0)))
+end)
+
 TEST.addTest("matchers-optional", function()
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 	AVCmds.createCommand {name="test"}
