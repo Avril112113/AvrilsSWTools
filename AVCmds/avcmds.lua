@@ -578,6 +578,7 @@ function AVCmds.string(tbl)
 	local pattern_simple = "^([^ ]-)"
 	local pattern_str_double = "^(\"[^\"]+\")"
 	local pattern_str_single = "^('[^']+')"
+	local pattern_str_multi = "^(%[(=*)%[(.*)%]%2%])"
 	---@type AVMatcher
 	return {
 		usage=tbl.usage or (tbl.strict and "qstring" or "string"),
@@ -598,6 +599,13 @@ function AVCmds.string(tbl)
 					msg = "Failed to match quoted string."
 				else
 					value = match:sub(2, -2)
+				end
+			elseif char == "[" then
+				_, match, inner, cut_value, finish = raw:match(pattern_str_multi .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
+				if inner == nil then
+					msg = "Failed to match quoted string."
+				else
+					value = inner
 				end
 			elseif tbl.strict ~= true then
 				match, cut_value, finish = raw:match(pattern_simple .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)

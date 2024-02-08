@@ -78,6 +78,10 @@ TEST.addTest("matchers-string", function()
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={"potato!"}}, AVCmds.onCustomCommand("?test potato!", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={"quoted string"}}, AVCmds.onCustomCommand("?test \"quoted string\"", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={"single quoted string with \" in it"}}, AVCmds.onCustomCommand("?test 'single quoted string with \" in it'", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={"Big 'ol string"}}, AVCmds.onCustomCommand("?test [[Big 'ol string]]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={"Even with the fancier \"=\" in 'em"}}, AVCmds.onCustomCommand("?test [==[Even with the fancier \"=\" in 'em]==]", 0)))
 
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 	AVCmds.createCommand {name="test"}
