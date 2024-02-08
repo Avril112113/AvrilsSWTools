@@ -105,7 +105,7 @@ TEST.addTest("matchers-number", function()
 	AVCmds.createCommand {name="test"}
 		:registerGlobalCommand()
 		:addHandler {
-			AVCmds.number(),
+			AVCmds.number{allow_inf=true, allow_nan=true},
 			---@param ctx AVCommandContext
 			function(ctx, ...)
 				print("~ arg test number")
@@ -117,6 +117,16 @@ TEST.addTest("matchers-number", function()
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={123}}, AVCmds.onCustomCommand("?test 123", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={-321}}, AVCmds.onCustomCommand("?test -321", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={1.23}}, AVCmds.onCustomCommand("?test 1.23", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={-32.1}}, AVCmds.onCustomCommand("?test -32.1", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={0xFFAA66}}, AVCmds.onCustomCommand("?test 0xFFAA66", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={4.57e-3}}, AVCmds.onCustomCommand("?test 4.57e-3", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={0.3e12}}, AVCmds.onCustomCommand("?test 0.3e12", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={5e+20}}, AVCmds.onCustomCommand("?test 5e+20", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={1/0}}, AVCmds.onCustomCommand("?test inf", 0)))
+	-- We can't reasonably check for nan, so we just make sure it parsed and assume it's the correct value.
+	TEST.check(Utils.cmd_expect({handled=true}, AVCmds.onCustomCommand("?test nan", 0)))
 
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 	AVCmds.createCommand {name="test"}

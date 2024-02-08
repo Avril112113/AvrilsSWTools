@@ -19,7 +19,6 @@
 	Solve all FIXME's within the code.
 	Handler return matcher type errors, for custom handling.
 	Add lua path matcher, eg, for savedata command "foo.bar[123]['baz bee']"
-	Test octal, binary and hexedecimal numbers.
 	Support INF & NAN.
 	Support multi-line strings [=[ ]=].
 ]]
@@ -636,7 +635,11 @@ function AVCmds.string(tbl)
 	}
 end
 
----@param tbl {min:number?,max:number?,cut_pat:string?,help:string,usage:string?}?
+local INF = 1/0
+local NAN = -(0/0)
+--- - `allow_inf` Allow parsing of INF, default false.
+--- - `allow_nan` Allow parsing of NAN, default false.
+---@param tbl {min:number?,max:number?,allow_inf:boolean?,allow_nan:boolean?,cut_pat:string?,help:string,usage:string?}?
 ---@return AVMatcher
 function AVCmds.number(tbl)
 	tbl = tbl or {}
@@ -656,7 +659,13 @@ function AVCmds.number(tbl)
 		match=function(self, raw, pos, cut)
 			local match, cut_value, finish = raw:match(pattern_simple .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
 			if match ~= nil then
-				local value = tonumber(match)
+				local value
+				if tbl.allow_inf and match:lower() == "inf" then
+					value = INF
+				elseif tbl.allow_nan and match:lower() == "nan" then
+					value = NAN
+				end
+				value = value or tonumber(match)
 				if value == nil then
 					---@type AVMatchError
 					return {
