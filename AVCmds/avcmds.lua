@@ -660,8 +660,8 @@ function AVCmds.number(tbl)
 			local match, cut_value, finish = raw:match(pattern_simple .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
 			if match ~= nil then
 				local value
-				if tbl.allow_inf and match:lower() == "inf" then
-					value = INF
+				if tbl.allow_inf and match:match("[+-]?[Ii][Nn][Ff]") then
+					value = match:sub(1, 1) == "-" and -INF or INF
 				elseif tbl.allow_nan and match:lower() == "nan" then
 					value = NAN
 				end
@@ -698,7 +698,7 @@ function AVCmds.number(tbl)
 end
 
 --- Wrapper around `AVCmds.number` but additional check to ensure a integer.
----@param tbl {min:integer?,max:integer?,cut_pat:string?,help:string,usage:string?}?
+---@param tbl {min:integer?,max:integer?,allow_inf:boolean?,allow_nan:boolean?,cut_pat:string?,help:string,usage:string?}?
 ---@return AVMatcher
 function AVCmds.integer(tbl)
 	tbl = tbl or {}

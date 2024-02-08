@@ -125,6 +125,8 @@ TEST.addTest("matchers-number", function()
 	TEST.check(Utils.cmd_expect({handled=true,args={0.3e12}}, AVCmds.onCustomCommand("?test 0.3e12", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={5e+20}}, AVCmds.onCustomCommand("?test 5e+20", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={1/0}}, AVCmds.onCustomCommand("?test inf", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={1/0}}, AVCmds.onCustomCommand("?test +inf", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={-1/0}}, AVCmds.onCustomCommand("?test -inf", 0)))
 	-- We can't reasonably check for nan, so we just make sure it parsed and assume it's the correct value.
 	TEST.check(Utils.cmd_expect({handled=true}, AVCmds.onCustomCommand("?test nan", 0)))
 
