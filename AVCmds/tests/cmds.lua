@@ -5,6 +5,19 @@ local Utils = require "test_utils"
 Utils.setup(TEST)
 
 
+---@param name string
+local function gen_default_handler(name)
+	---@param ctx AVCommandContext
+	return function (ctx, ...)
+		print("~ " .. name)
+		print(table.concat(AVCmds.toparts_context_path(ctx), " "))
+		for i, v in pairs({...}) do
+			print(i, Utils.str_value(v))
+		end
+	end
+end
+
+
 local MATCH_ERRORS = AVCmds.MATCH_ERRORS
 
 
@@ -67,14 +80,7 @@ TEST.addTest("matchers-string", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.string(),
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test string")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test string")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={"potato!"}}, AVCmds.onCustomCommand("?test potato!", 0)))
@@ -88,14 +94,7 @@ TEST.addTest("matchers-string", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.string{min=5,max=7,strict=true},
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test string")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test string")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_STRING_LEN}, AVCmds.onCustomCommand("?test 'smol'", 0)))
@@ -110,14 +109,7 @@ TEST.addTest("matchers-number", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.number{allow_inf=true, allow_nan=true},
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test number")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test number")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={123}}, AVCmds.onCustomCommand("?test 123", 0)))
@@ -139,14 +131,7 @@ TEST.addTest("matchers-number", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.number{min=0,max=3},
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test number")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test number")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_NUMBER_RANGE}, AVCmds.onCustomCommand("?test -99999", 0)))
@@ -161,14 +146,7 @@ TEST.addTest("matchers-boolean", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.boolean(),
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test boolean")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test boolean")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test true", 0)))
@@ -184,14 +162,7 @@ TEST.addTest("matchers-boolean", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.boolean{strict=true},
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test boolean")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test boolean")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_BOOLEAN}, AVCmds.onCustomCommand("?test yes", 0)))
@@ -206,14 +177,7 @@ TEST.addTest("matchers-wildcard", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.wildcard(),
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test wildcard")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test wildcard")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={"potato 123 abc true through me."}}, AVCmds.onCustomCommand("?test potato 123 abc true through me.", 0)))
@@ -225,14 +189,7 @@ TEST.addTest("matchers-wildcard", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.wildcard{min=5,max=7},
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test string")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test wildcard")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_WILDCARD_LEN}, AVCmds.onCustomCommand("?test smol", 0)))
@@ -246,14 +203,7 @@ TEST.addTest("matchers-wildcard", function()
 		:addHandler {
 			AVCmds.wildcard{cut_pat=";"},
 			AVCmds.wildcard(),
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test wildcard")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test wildcard")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={"foo bar baz", "yupee, it cut!"}}, AVCmds.onCustomCommand("?test foo bar baz; yupee, it cut!", 0)))
@@ -265,14 +215,7 @@ TEST.addTest("matchers-array", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.array{AVCmds.string()},
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test array")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test array")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={{"a", "b", "c"}}}, AVCmds.onCustomCommand("?test a,b,c", 0)))
@@ -287,14 +230,7 @@ TEST.addTest("matchers-array", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.array{AVCmds.string(),min=2,max=3},
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test array")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test array")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_ARRAY_COUNT}, AVCmds.onCustomCommand("?test a", 0)))
@@ -307,14 +243,7 @@ TEST.addTest("matchers-array", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.array{AVCmds.string(),seperator=" "},
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test array")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test array")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={{"a", "b", "c"}}}, AVCmds.onCustomCommand("?test a b c", 0)))
@@ -351,14 +280,7 @@ TEST.addTest("matchers-player", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.player(),
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test player")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test player")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={AVCmds.get_player_from_id(0)}}, AVCmds.onCustomCommand("?test 0", 0)))
@@ -393,14 +315,7 @@ TEST.addTest("matchers-position", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.position(),
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test position")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test position")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(0))}}, AVCmds.onCustomCommand("?test Avril112113", 0)))
@@ -425,14 +340,7 @@ TEST.addTest("matchers-optional", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.optional(AVCmds.boolean()),
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test optional")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test optional")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test true", 0)))
@@ -443,16 +351,19 @@ TEST.addTest("matchers-optional", function()
 	AVCmds.createCommand {name="test"}
 		:registerGlobalCommand()
 		:addHandler {
+			AVCmds.optional(AVCmds.boolean(), false),
+			gen_default_handler("arg test optional")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test", 0)))
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
 			AVCmds.optional(AVCmds.boolean()),
 			AVCmds.number(),
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test optional")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test optional")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={true, 1}}, AVCmds.onCustomCommand("?test true 1", 0)))
@@ -466,14 +377,7 @@ TEST.addTest("matchers-or", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.or_{AVCmds.boolean(), AVCmds.number()},
-			---@param ctx AVCommandContext
-			function(ctx, ...)
-				print("~ arg test optional")
-				print(table.concat(AVCmds.toparts_context_path(ctx), " "))
-				for i, v in pairs({...}) do
-					print(i, Utils.str_value(v))
-				end
-			end
+			gen_default_handler("arg test or")
 		}
 
 	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test true", 0)))
@@ -483,4 +387,58 @@ TEST.addTest("matchers-or", function()
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.EXCESS_INPUT}, AVCmds.onCustomCommand("?test true 666", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.OR_FAILED}, AVCmds.onCustomCommand("?test stringy", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.OR_FAILED}, AVCmds.onCustomCommand("?test", 0)))
+end)
+
+TEST.addTest("prehandlers", function()
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addPreHandler(
+			---@param ctx AVCommandContext
+			function(ctx)
+				local args = ctx.args
+				if type(args[1]) == "string" then
+					if #args[1] ~= 3 then
+						---@type AVMatchError
+						return {
+							err=MATCH_ERRORS.BAD_STRING_LEN,pos=ctx.pos,
+							msg="Must be a length of 3", expected="length of 3"
+						}
+					end
+				end
+			end
+		)
+		:addHandler {
+			AVCmds.string{},
+			AVCmds.createCommand {}
+				:addPreHandler(
+					---@param ctx AVCommandContext
+					function(ctx)
+						local parent_args = ctx.parent.args
+						---@cast parent_args {[1]:string}
+						if parent_args[1]:sub(1, 1) ~= "f" then
+							---@type AVMatchError
+							return {
+								err=MATCH_ERRORS.BAD_STRING,pos=ctx.pos,
+								msg="Must start with 'f'", expected="Starts with 'f'"
+							}
+						end
+					end
+				)
+				:addHandler {
+					AVCmds.number{},
+					gen_default_handler("arg test prehandlers")
+				}
+				:addHandler {
+					AVCmds.boolean{},
+					gen_default_handler("arg test prehandlers")
+				}
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={123}}, AVCmds.onCustomCommand("?test foo 123", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test foo true", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_STRING_LEN}, AVCmds.onCustomCommand("?test foooo -2", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_STRING_LEN}, AVCmds.onCustomCommand("?test foooo false", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_STRING}, AVCmds.onCustomCommand("?test bar -1", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_STRING}, AVCmds.onCustomCommand("?test bar false", 0)))
 end)

@@ -1,5 +1,5 @@
 --- Avrils Commands Library
---- Version: 0.1.0
+--- Version: 0.2.0
 
 --[[
 	There are numerous methods that can be overriden, they are found below AVCmds.onCustomCommand.
@@ -8,6 +8,10 @@
 	If you want to create custom matchers, use `AVCmds.player` as an example, as that is likley the closest to your use case.
 	`AVCmds.player` uses an existing matcher.
 	For errors, `BAD_PLAYER` can be any reasonable unique string.
+
+	Pre-handlers are called before the handler that has been matched, etheir in this command or a sub-command.
+	They only take a context, but are free to modify it. These are intended for argument adjustments and validation.
+	They can be an easier alternative to creating a custom matcher.
 
 	Handlers can return a AVMatchError, which will act as if an argument failed to match.
 	This allows using the default error handling and additional argument validation.
@@ -34,7 +38,7 @@
 ---@field pos integer
 ---@field err AVMatchErrorCode
 ---@field msg string
----@field brief string?  # Used over matcher, for multi-error list.
+---@field expected string?  # Used over matcher, for multi-error list.
 
 ---@alias AVMatcherResult AVMatchValue|AVMatchError
 
@@ -54,7 +58,7 @@
 ---@field finish integer  # Position in the input this context finishes.
 ---@field player SWPlayer  # The player that run the command (peer_id of `0` for server)
 ---@field argsData table<number|string, AVMatchValue|AVMatchError>  # The full info about all arguments.
----@field args table<number|string>  # Quick access to argument values, primarily used for flags.
+---@field args table<number|string,any>  # Quick access to argument values, primarily used for flags.
 ---@field err AVMatchError?  # Error for this context.
 
 ---@class AVCreateCommandTbl
@@ -221,6 +225,7 @@ function AVCmds.formatContextErr(ctx)
 
 	local err_ctxs = {}
 	local options = {}
+	local options_set = {}
 	local pos = ctx.finish
 	local arg_depth = 0
 	for _, handler in ipairs(ctx.children_order) do
@@ -232,20 +237,29 @@ function AVCmds.formatContextErr(ctx)
 			if #child_ctx.args > arg_depth then
 				err_ctxs = {}
 				options = {}
+				options_set = {}
 				arg_depth = #child_ctx.args
 			end
-			table.insert(err_ctxs, child_ctx)
-			if child_ctx.err.brief then
-				table.insert(options, child_ctx.err.brief)
-			elseif child_ctx.err.matcher then  -- In the case of "EXCESS_INPUT" or custom handler errors.
-				table.insert(options, child_ctx.err.matcher.usage)
-			else
-				table.insert(options, child_ctx.err.err)
+			local option
+			if child_ctx.err.expected then
+				table.insert(options, child_ctx.err.expected)
+				option = child_ctx.err.expected
+			elseif child_ctx.err.matcher then
+				option = child_ctx.err.matcher.usage
+			else  -- In the case of "EXCESS_INPUT" or custom handler errors, there is no matcher.
+				option = child_ctx.err.err
 			end
-			-- Get the smallest error position that isn't the parents error position.
-			-- Plus sanity check, as possible bugs could cause the child error position to be less than it's parent.
-			if (ctx.finish == pos or child_ctx.err.pos < pos) and child_ctx.err.pos > ctx.finish then
-				pos = child_ctx.err.pos
+			-- Typing system didn't get the memo apparently.
+			---@cast option -?
+			-- Prevent duplicates
+			if not options_set[option] then
+				options_set[option] = true
+				table.insert(err_ctxs, child_ctx)
+				-- Get the smallest error position that isn't the parents error position.
+				-- Plus sanity check, as possible bugs could cause the child error position to be less than it's parent.
+				if (ctx.finish == pos or child_ctx.err.pos < pos) and child_ctx.err.pos > ctx.finish then
+					pos = child_ctx.err.pos
+				end
 			end
 		end
 	end
@@ -275,7 +289,7 @@ function AVCmds.onCustomCommand(full_message, peer_id)
 	end
 
 	-- Start at pos after prefix
-	local pos = #AVCmds._PREFIX + 1
+	local pos = 1 + #AVCmds._PREFIX
 
 	---@type AVCommandContext
 	local ctx = AVCmds._root_command:_create_context {
@@ -323,6 +337,10 @@ function AVCmds.createCommand(tbl)
 	---@field description string?
 	---@field permission any?
 	local command = {__name="AVCommand"}
+	---@type AVCommandHandlerFun[]
+	command._pre_handlers = {}
+	---@type table<AVCommandHandlerFun,integer>
+	command._pre_handlers_indicies = {}  -- A look up to get pre handler index from pre handler
 	---@type (AVCommandHandlerTbl|AVCommand)[]
 	command._handlers = {}
 	---@type table<AVCommandHandlerTbl|AVCommand,integer>
@@ -354,6 +372,15 @@ function AVCmds.createCommand(tbl)
 			matcher,
 			self
 		}
+		return self
+	end
+	--- Pre-handlers are called just before a normal handler, they are intended to modify the context and add additional validation.
+	--- Helpful in reducing duplicate code for handlers and sub-commands. 
+	---@param pre_handler AVCommandHandlerFun
+	function command:addPreHandler(pre_handler)
+		AVCmds.assert(type(pre_handler) == "function", "Invalid pre handler, was not a function.")
+		table.insert(self._pre_handlers, pre_handler)
+		self._pre_handlers_indicies[pre_handler] = #self._pre_handlers
 		return self
 	end
 	--- Add the default usage handler.
@@ -429,6 +456,14 @@ function AVCmds.createCommand(tbl)
 					ctx.args[i] = match.value
 					pos_parse = raw:match("^ *()", match.finish)  -- Ensure all spaces are consumed
 					ctx.finish = pos_parse
+				end
+				for _, pre_handler in ipairs(self._pre_handlers) do
+					local result = pre_handler(ctx)
+					if type(result) == "table" then
+						AVCmds.assert(type(result.err) == "string" and type(result.msg) == "string" and type(result.pos) == "number", "Invalid handler error.")
+						ctx.err = result
+						goto continue
+					end
 				end
 				local handle = handler[#handler]
 				if type(handle) == "function" then
@@ -1059,9 +1094,14 @@ function AVCmds.position(tbl)
 end
 
 ---@param matcher AVMatcher
+---@param default any|fun():any
 ---@return AVMatcher
-function AVCmds.optional(matcher)
+function AVCmds.optional(matcher, default)
 	AVCmds.assert(matcher, "AVCmds.optional requires a matcher.")
+	if type(default) ~= "function" then
+		local default_value = default
+		default = function() return default_value end
+	end
 	---@type AVMatcher
 	return {
 		usage=matcher.usage,
@@ -1070,7 +1110,7 @@ function AVCmds.optional(matcher)
 			local result = matcher:match(raw, pos, cut)
 			if result.err then
 				---@type AVMatchValue
-				return {matcher=self, start=pos, finish=pos, raw="", cut="", value=nil}
+				return {matcher=self, start=pos, finish=pos, raw="", cut="", value=default()}
 			end
 			return result
 		end,
