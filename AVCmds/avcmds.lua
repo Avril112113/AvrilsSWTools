@@ -2,20 +2,29 @@
 --- Version: 0.2.0
 
 --[[
-	There are numerous methods that can be overriden, they are found below AVCmds.onCustomCommand.
+	Terminology:
+		A 'command' is as created by `AVCmds.createCommand`.
+		A 'pre-handler' is as created by `some_cmd:addPreHandler`
+		A 'handler' is as created by `some_cmd:addHandler`
+		A 'handler function' is the last value provided to `some_cmd:addHandler`
+		A 'sub-command' is a command from `AVCmds.createCommand` that is used as a handler function.
+
+	There are numerous methods that can be overriden, these will all be above AVCmds.onCustomCommand in this file.
 	However, all of these do have "works out of the box" defaults.
 	
 	If you want to create custom matchers, use `AVCmds.player` as an example, as that is likley the closest to your use case.
-	`AVCmds.player` uses an existing matcher.
+	`AVCmds.player` uses another existing matcher, so it should be simple to adjust to your own needs.
 	For errors, `BAD_PLAYER` can be any reasonable unique string.
 
-	Pre-handlers are called before the handler that has been matched, etheir in this command or a sub-command.
-	They only take a context, but are free to modify it. These are intended for argument adjustments and validation.
-	They can be an easier alternative to creating a custom matcher.
+	Pre-handlers are called before the handler that has been matched.
+	They only take a context, but are free to modify it safely.
+	These are intended for argument validation and transformation.
+	They can be an easier and quicker alternative to creating a custom matcher, but have more things to keep in-mind.
+	NOTE that pre-handlers might be called even if the subsequent handlers never match anything! This is the case with sub-commands.
 
-	Handlers can return a AVMatchError, which will act as if an argument failed to match.
-	This allows using the default error handling and additional argument validation.
-	*Easier alternative to making a custom arg matcher.*
+	Handlers and pre-handlers can return a AVMatchError, which will act the same as if an argument failed to match.
+	This allows using the default error handling to provide additional argument validation.
+	Do feel free to handle invalid input without this, it's not always desired to use the default handling!
 ]]
 
 --[[ Grand TODO list:
@@ -74,6 +83,8 @@
 ---@class AVCommandHandlerTbl
 ---@field [integer] AVMatcher|AVCommand|AVCommandHandlerFun
 ---@field [string] AVMatcher|AVCommand
+
+---@alias AVCommandPreHandlerFun fun(ctx:AVCommandContext):AVMatchError|true?  # Returned error does not need matcher field, but all other are required.
 
 
 local ADDON_NAME = server.getAddonData((server.getAddonIndex())).name
@@ -374,9 +385,11 @@ function AVCmds.createCommand(tbl)
 		}
 		return self
 	end
-	--- Pre-handlers are called just before a normal handler, they are intended to modify the context and add additional validation.
-	--- Helpful in reducing duplicate code for handlers and sub-commands. 
-	---@param pre_handler AVCommandHandlerFun
+	--- WARN: A pre-handler might be called when a futher match fails, ensure to be careful what you do in a pre-handler (happens with sub-commands, using a command in a handler)  
+	--- Pre-handlers are called before a normal handler, they are intended to modify the context and add additional validation.  
+	--- Helpful in reducing duplicate code for handlers and sub-commands.  
+	--- Pre-handlers can return `true` to skip the original handler and any deeper pre-handlers, acting as if it were sucsessfully handled.  
+	---@param pre_handler AVCommandPreHandlerFun
 	function command:addPreHandler(pre_handler)
 		AVCmds.assert(type(pre_handler) == "function", "Invalid pre handler, was not a function.")
 		table.insert(self._pre_handlers, pre_handler)
@@ -463,6 +476,8 @@ function AVCmds.createCommand(tbl)
 						AVCmds.assert(type(result.err) == "string" and type(result.msg) == "string" and type(result.pos) == "number", "Invalid handler error.")
 						ctx.err = result
 						goto continue
+					elseif result == true then
+						return true, ctx
 					end
 				end
 				local handle = handler[#handler]

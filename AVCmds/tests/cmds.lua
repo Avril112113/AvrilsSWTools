@@ -441,4 +441,34 @@ TEST.addTest("prehandlers", function()
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_STRING_LEN}, AVCmds.onCustomCommand("?test foooo false", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_STRING}, AVCmds.onCustomCommand("?test bar -1", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_STRING}, AVCmds.onCustomCommand("?test bar false", 0)))
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addPreHandler(
+			---@param ctx AVCommandContext
+			function(ctx)
+				return true
+			end
+		)
+		:addHandler {
+			AVCmds.createCommand {}
+				:addHandler{
+					AVCmds.string{},
+					gen_default_handler("arg test prehandlers")
+				}
+		}
+
+	-- Note that the arguments are empty here, if it matched further it'd have errored with BAD_STRING.
+	-- It didn't match futher however, because of using a sub-command.
+	TEST.check(Utils.cmd_expect({handled=true,args={}}, AVCmds.onCustomCommand("?test", 0)))
+
+	--[[ To better describe what is happening here:
+		Pre handlers are run before a normal handler,
+		however this only applies to the current command, and in this case the handler does indeed match as it requires no arguments.
+		So the handler is run, but before that the pre handler,
+		however the pre-handler returns `true` to skip the handler.
+		This results in the sub-command never being checked and it's required arguments being completley ignored, since it was told to be skipped.
+		~ The detail here is, sub-commands are checked when the handler is run for them.
+	]]
 end)
