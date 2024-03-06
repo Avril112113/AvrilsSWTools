@@ -341,7 +341,6 @@ function AVCmds.getTextWidth(text)
 	local width = 0
 	for char in text:gmatch(".") do
 		local char_width = AVCmds.TEXT_WIDTH_DATA[char]
-		-- TODO: Test these changes.
 		if char_width == nil then
 			AVCmds.log(("No width for char 0x%X '%s'"):format(string.byte(char), char))
 			char_width = AVCmds.TEXT_WIDTH_DEFAULT
