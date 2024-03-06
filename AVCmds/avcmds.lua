@@ -147,6 +147,10 @@ function AVCmds.checkPermission(ctx)
 	)
 end
 
+function AVCmds.log(message)
+	debug.log(("[SW-%s] %s"):format(ADDON_NAME, tostring(message)))
+end
+
 --- This can be overridden to adjust how asstertions are handled and displayed.
 --- Expects similar behaviour to Lua's `assert()`
 ---@generic T
@@ -158,7 +162,8 @@ end
 ---@diagnostic disable-next-line: duplicate-set-field
 function AVCmds.assert(v, message, ...)
 	if not v then
-		debug.log(("[SW-%s] [error] %s"):format(ADDON_NAME, tostring(message)))
+		AVCmds.log(("[error] %s"):format(tostring(message)))
+		-- `error()` doesn't exist in SW, but it will stop execution, since it doesn't.
 		error(message)
 	end
 	return v, message, ...
@@ -327,7 +332,8 @@ function AVCmds.onCustomCommand(full_message, peer_id)
 end
 
 -- noto.ttf
-AVCmds.TEXT_WIDTH_DATA = {[" "]=532, ["!"]=551, ["\""]=836, ["#"]=1323, ["$"]=1171, ["%"]=1702, ["&"]=1499, ["'"]=461, ["("]=614, [")"]=614, ["*"]=1128, ["+"]=1171, [","]=549, ["-"]=659, ["."]=549, ["/"]=762, ["0"]=1171, ["1"]=1171, ["2"]=1171, ["3"]=1171, ["4"]=1171, ["5"]=1171, ["6"]=1171, ["7"]=1171, ["8"]=1171, ["9"]=1171, [":"]=549, [";"]=549, ["<"]=1171, ["="]=1171, [">"]=1171, ["?"]=889, ["@"]=1841, ["A"]=1309, ["B"]=1331, ["C"]=1294, ["D"]=1495, ["E"]=1139, ["F"]=1063, ["G"]=1491, ["H"]=1518, ["I"]=694, ["J"]=559, ["K"]=1268, ["L"]=1073, ["M"]=1858, ["N"]=1556, ["O"]=1599, ["P"]=1239, ["Q"]=1599, ["R"]=1274, ["S"]=1124, ["T"]=1139, ["U"]=1497, ["V"]=1229, ["W"]=1905, ["X"]=1200, ["Y"]=1159, ["Z"]=1171, ["["]=674, ["\\"]=762, ["]"]=674, ["^"]=1171, ["_"]=909, ["`"]=1188, ["a"]=1149, ["b"]=1260, ["c"]=983, ["d"]=1260, ["e"]=1155, ["f"]=705, ["g"]=1260, ["h"]=1266, ["i"]=528, ["j"]=528, ["k"]=1094, ["l"]=528, ["m"]=1915, ["n"]=1266, ["o"]=1239, ["p"]=1260, ["q"]=1260, ["r"]=846, ["s"]=981, ["t"]=739, ["u"]=1266, ["v"]=1040, ["w"]=1610, ["x"]=1083, ["y"]=1044, ["z"]=963, ["{"]=778, ["|"]=1128, ["}"]=778,}
+AVCmds.TEXT_WIDTH_DATA = {[' ']=532,['!']=551,['"']=836,['#']=1323,['$']=1171,['%']=1702,['&']=1499,["'"]=461,['(']=614,[')']=614,['*']=1128,['+']=1171,[',']=549,['-']=659,['.']=549,['/']=762,['0']=1171,['1']=1171,['2']=1171,['3']=1171,['4']=1171,['5']=1171,['6']=1171,['7']=1171,['8']=1171,['9']=1171,[':']=549,[';']=549,['<']=1171,['=']=1171,['>']=1171,['?']=889,['@']=1841,['A']=1309,['B']=1331,['C']=1294,['D']=1495,['E']=1139,['F']=1063,['G']=1491,['H']=1518,['I']=694,['J']=559,['K']=1268,['L']=1073,['M']=1858,['N']=1556,['O']=1599,['P']=1239,['Q']=1599,['R']=1274,['S']=1124,['T']=1139,['U']=1497,['V']=1229,['W']=1905,['X']=1200,['Y']=1159,['Z']=1171,['[']=674,['\\']=762,[']']=674,['^']=1171,['_']=909,['`']=1188,['a']=1149,['b']=1260,['c']=983,['d']=1260,['e']=1155,['f']=705,['g']=1260,['h']=1266,['i']=528,['j']=528,['k']=1094,['l']=528,['m']=1915,['n']=1266,['o']=1239,['p']=1260,['q']=1260,['r']=846,['s']=981,['t']=739,['u']=1266,['v']=1040,['w']=1610,['x']=1083,['y']=1044,['z']=963,['{']=778,['|']=1128,['}']=778,['~']=1171}
+AVCmds.TEXT_WIDTH_DEFAULT = 1229
 --- Gets the width of some text in chat.
 ---@param text string
 ---@return number
@@ -335,8 +341,10 @@ function AVCmds.getTextWidth(text)
 	local width = 0
 	for char in text:gmatch(".") do
 		local char_width = AVCmds.TEXT_WIDTH_DATA[char]
+		-- TODO: Test these changes.
 		if char_width == nil then
-			error(("No width for char '%s'"):format(char))
+			AVCmds.log(("No width for char 0x%X '%s'"):format(string.byte(char), char))
+			char_width = AVCmds.TEXT_WIDTH_DEFAULT
 		end
 		width = width + char_width
 	end
@@ -851,7 +859,7 @@ end
 --- #### NOTE for space seperator:  
 --- . When not hard limiting the amount of elements with `n`  
 --- . some element matchers will cause subsequent arguments to not be matched.  
---- . For example, a non-scrict string matcher will consume nearly anything, and so the subsequent argument to the command will 'not exist'.  
+--- . For example, a non-strict string matcher will consume nearly anything, and so the subsequent argument to the command will 'not exist'.  
 --- [integer] repeating pattern of elements.  
 --- - `n` match exactly this elements.  
 --- - `min` at least this many elements.  
