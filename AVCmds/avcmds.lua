@@ -253,7 +253,6 @@ function AVCmds.formatContextErr(ctx)
 			end
 			local option
 			if child_ctx.err.expected then
-				table.insert(options, child_ctx.err.expected)
 				option = child_ctx.err.expected
 			elseif child_ctx.err.matcher then
 				option = child_ctx.err.matcher.usage
@@ -265,6 +264,7 @@ function AVCmds.formatContextErr(ctx)
 			-- Prevent duplicates
 			if not options_set[option] then
 				options_set[option] = true
+				table.insert(options, option)
 				table.insert(err_ctxs, child_ctx)
 				-- Get the smallest error position that isn't the parents error position.
 				-- Plus sanity check, as possible bugs could cause the child error position to be less than it's parent.
@@ -279,6 +279,9 @@ function AVCmds.formatContextErr(ctx)
 		local child_ctx = err_ctxs[1]
 		local spaces = (AVCmds.getTextWidth(ctx.raw:sub(1, child_ctx.err.pos)) - AVCmds.TEXT_WIDTH_DATA["^"]) / AVCmds.TEXT_WIDTH_DATA[" "]
 		return ("%s\n%s\n%s"):format(child_ctx.err.msg, child_ctx.raw, string.rep(" ", math.ceil(spaces - 0.1)) .. "^")
+	end
+	if #options <= 0 then
+		return "Unknown error processing command."
 	end
 	local spaces = (AVCmds.getTextWidth(ctx.raw:sub(1, pos)) - AVCmds.TEXT_WIDTH_DATA["^"]) / AVCmds.TEXT_WIDTH_DATA[" "]
 	return ("Expected %s\n%s\n%s"):format(concat_english(options, ", ", " or "), ctx.raw, string.rep(" ", math.ceil(spaces - 0.1)) .. "^")
