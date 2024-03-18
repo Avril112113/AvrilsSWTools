@@ -101,6 +101,17 @@ TEST.addTest("matchers-string", function()
 	TEST.check(Utils.cmd_expect({handled=true, args={"valid"}}, AVCmds.onCustomCommand("?test 'valid'", 0)))
 	TEST.check(Utils.cmd_expect({handled=true, args={"valid12"}}, AVCmds.onCustomCommand("?test 'valid12'", 0)))
 	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_STRING_LEN}, AVCmds.onCustomCommand("?test 'too_long'", 0)))
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.string{simple=true},
+			gen_default_handler("arg test string")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true, args={"simple_string"}}, AVCmds.onCustomCommand("?test simple_string", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_STRING}, AVCmds.onCustomCommand("?test 'non-simple string'", 0)))
 end)
 
 TEST.addTest("matchers-number", function()

@@ -627,53 +627,45 @@ end
 --- - `min` - min string length
 --- - `max` - max string length
 --- - `strict` - If `true`, only allow quoted strings.
----@param tbl {min:integer,max:integer,strict:boolean?,cut_pat:string?,help:string,usage:string?}?
+--- - `simple` - If `true`, only allow simple strings.
+---@param tbl {min:integer,max:integer,strict:boolean?,simple:boolean?,cut_pat:string?,help:string,usage:string?}?
 ---@return AVMatcher
 function AVCmds.string(tbl)
 	tbl = tbl or {}
-	local pattern_simple = "^([^ ]-)"
-	local pattern_str_double = "^(\"[^\"]+\")"
-	local pattern_str_single = "^('[^']+')"
-	local pattern_str_multi = "^(%[(=*)%[(.*)%]%2%])"
+	AVCmds.assert(not (tbl.strict and tbl.simple), "AVCmds.string `strict` is not compatible with `simple`.")
+	local PATTERN_SIMPLE = "^([^ ]-)"
+	local CHAR_TO_PAT = {
+		["\""]="^()(\"[^\"]+\")",
+		["'"]="^()('[^']+')",
+		["["]="^%[(=*)(%[.*%])%1%]",
+	}
 	---@type AVMatcher
 	return {
-		usage=tbl.usage or (tbl.strict and "qstring" or "string"),
+		usage=tbl.usage or (tbl.strict and "q-string" or tbl.simple and "s-string" or "string"),
 		help=tbl.help,
 		match=function(self, raw, pos, cut)
 			local match, cut_value, finish, value, msg
 			local char = raw:sub(pos, pos)
-			if char == "\"" then
-				match, cut_value, finish = raw:match(pattern_str_double .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
-				if match == nil then
+			if CHAR_TO_PAT[char] then
+				_, match, cut_value, finish = raw:match(CHAR_TO_PAT[char] .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
+				if tbl.simple then
+					msg = "Expected simple string."
+				elseif match == nil then
 					msg = "Failed to match quoted string."
 				else
 					value = match:sub(2, -2)
-				end
-			elseif char == "'" then
-				match, cut_value, finish = raw:match(pattern_str_single .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
-				if match == nil then
-					msg = "Failed to match quoted string."
-				else
-					value = match:sub(2, -2)
-				end
-			elseif char == "[" then
-				_, match, inner, cut_value, finish = raw:match(pattern_str_multi .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
-				if inner == nil then
-					msg = "Failed to match quoted string."
-				else
-					value = inner
 				end
 			elseif tbl.strict ~= true then
-				match, cut_value, finish = raw:match(pattern_simple .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
+				match, cut_value, finish = raw:match(PATTERN_SIMPLE .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
 				if match == nil then
 					msg = "Failed to match string."
 				else
 					value = match
 				end
 			else
-				msg = "Expected quoted string."
+				msg = (tbl.strict == true and "Expected quoted string.") or (tbl.simple and "Expected simple string.") or "Expected ??? string."
 			end
-			if match ~= nil then
+			if match ~= nil and msg == nil then
 				if tbl.min and #value < tbl.min then
 					---@type AVMatchError
 					return {
