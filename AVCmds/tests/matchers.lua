@@ -346,3 +346,23 @@ TEST.addTest("matchers-or", function()
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.OR_FAILED}, AVCmds.onCustomCommand("?test stringy", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.OR_FAILED}, AVCmds.onCustomCommand("?test", 0)))
 end)
+
+TEST.addTest("matchers-table_key", function()
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.table_key(),
+			gen_default_handler("arg test table_key")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={"simple"}}, AVCmds.onCustomCommand("?test simple", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={123}}, AVCmds.onCustomCommand("?test [123]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test [true]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={"stringy"}}, AVCmds.onCustomCommand("?test ['stringy']", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_TABLE_KEY}, AVCmds.onCustomCommand("?test [bad_simple]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_TABLE_KEY}, AVCmds.onCustomCommand("?test [bad space]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={"valid space"}}, AVCmds.onCustomCommand("?test [ 'valid space' ]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={456}}, AVCmds.onCustomCommand("?test [ 456 ]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test [ false ]", 0)))
+end)

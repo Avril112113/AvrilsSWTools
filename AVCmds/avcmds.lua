@@ -125,6 +125,7 @@ AVCmds.MATCH_ERRORS = {
 	BAD_ARRAY_COUNT="BAD_ARRAY_COUNT",
 	BAD_TABLE="BAD_TABLE",
 	BAD_TABLE_COUNT="BAD_TABLE_COUNT",
+	BAD_TABLE_KEY="BAD_TABLE_KEY",
 	BAD_PLAYER="BAD_PLAYER",
 	BAD_POSITION="BAD_POSITION",
 	OR_FAILED="OR_FAILED",
@@ -944,7 +945,7 @@ function AVCmds.array(tbl)
 				---@type AVMatchError
 				return {
 					matcher=self, pos=array_pos, err=AVCmds.MATCH_ERRORS.BAD_ARRAY,
-					msg="Missing cut value",
+					msg="Missing cut value.",
 				}
 			end
 			---@type AVMatchValue
@@ -958,7 +959,7 @@ end
 --- - `key` matcher to use for keys. (defaults to AVCmds.table_key)  
 --- - `value` matcher to use for values. (defaults to AVCmds.table_value)  
 --- - `braces` string of 2 charecters for opening and closing of a table, default "{}", make sure to change this!  
----@param tbl {key:AVMatcher?,value:AVMatcher?,seperator:string?,braces:string,help:string,usage:string?}
+---@param tbl {key:AVMatcher?,value:AVMatcher?,seperator:string?,braces:string,cut_pat:string?,help:string,usage:string?}
 ---@return AVMatcher
 function AVCmds.table(tbl)
 	error("TODO")
@@ -966,7 +967,7 @@ function AVCmds.table(tbl)
 	AVCmds.assert(tbl.key == nil, "AVCmds.table key matchers are not supported yet.")
 	AVCmds.assert(tbl.value == nil, "AVCmds.table value matchers are not supported yet.")
 	local seperator = tbl.seperator or ","
-	local braces = tbl.braces or "[]"
+	local braces = tbl.braces or "()"
 	local open = braces:sub(1, 1)
 	local close = braces:sub(2, 2)
 	---@type AVMatcher
@@ -979,22 +980,63 @@ function AVCmds.table(tbl)
 	}
 end
 
+--- - `braces` - string of 2 charecters for opening and closing of a table key, default "[]"
 --- A handy matcher for table keys.  
 --- Matches a simple string or a AVCmds.value wrapped in square braces.  
----@param tbl {help:string,usage:string?}
+---@param tbl {braces:string?,cut_pat:string?,help:string,usage:string?}?
 function AVCmds.table_key(tbl)
-	error("TODO")
+	tbl = tbl or {}
+	AVCmds.assert(tbl.braces == nil or #tbl.braces == 2, "AVCmds.table `braces` should be of length 2.")
+	local braces = tbl.braces or "[]"
+	local open = braces:sub(1, 1)
+	local close = braces:sub(2, 2)
+	local simple_matcher = AVCmds.string{simple=true}
+	local value_matcher = AVCmds.or_{
+		AVCmds.string{strict=true},
+		AVCmds.number{allow_inf=true, allow_nan=true},
+		AVCmds.boolean{strict=true},
+	}
+	local braces_pat = "^%b" .. open .. close
 	---@type AVMatcher
 	return {
-		usage=tbl.usage or "key",
+		usage=tbl.usage or "table key",
 		help=tbl.help,
 		match=function(self, raw, pos, cut)
-			error("TODO")
+			local result = simple_matcher:match(raw, pos, cut)
+			if not result.err then
+				return result
+			end
+			local match = raw:match(braces_pat, pos)
+			if match == nil then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_TABLE_KEY,
+					msg=("Missing table_key opening brace '%s'."):format(open),
+				}
+			end
+			local cut_value, finish = raw:match(AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos+#match)
+			if cut_value == nil then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=pos+#match, err=AVCmds.MATCH_ERRORS.BAD_TABLE_KEY,
+					msg="Missing cut value.",
+				}
+			end
+			local inner_pos = raw:match("^ *()", pos+#open)
+			result = value_matcher:match(raw, inner_pos, " *"..escape_pattern(close))
+			if result.err then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=result.pos, err=AVCmds.MATCH_ERRORS.BAD_TABLE_KEY,
+					msg=("Invalid table_key value."):format(open),
+				}
+			end
+			return result
 		end,
 	}
 end
 
---- A handy matcher for primative lua values (number, string, table).  
+--- A handy matcher for primative lua values.
 --- This includes: numbers, strings, tables and arrays.  
 ---@param tbl {help:string,usage:string?}
 function AVCmds.value(tbl)
