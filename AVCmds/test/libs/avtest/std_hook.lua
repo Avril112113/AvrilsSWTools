@@ -82,8 +82,8 @@ function StdHook:_createHooks()
 	end
 	_hooks.print = function(...)
 		local values = {...}
-		for i, v in ipairs(values) do
-			values[i] = tostring(v)
+		for i=1,select("#", ...) do
+			values[i] = tostring(values[i])
 		end
 		_hooks.stdout:__write(3, table.concat(values, "\t"), "\n")
 	end
