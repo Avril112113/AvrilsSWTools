@@ -630,7 +630,7 @@ end
 --- - `max` - max string length
 --- - `strict` - If `true`, only allow quoted strings.
 --- - `simple` - If `true`, only allow simple strings.
----@param tbl {min:integer,max:integer,strict:boolean?,simple:boolean?,cut_pat:string?,help:string,usage:string?}?
+---@param tbl {min:integer,max:integer,strict:boolean?,simple:boolean?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.string(tbl)
 	tbl = tbl or {}
@@ -697,7 +697,7 @@ local INF = 1/0
 local NAN = -(0/0)
 --- - `allow_inf` Allow parsing of INF, default false.
 --- - `allow_nan` Allow parsing of NAN, default false.
----@param tbl {min:number?,max:number?,allow_inf:boolean?,allow_nan:boolean?,cut_pat:string?,help:string,usage:string?}?
+---@param tbl {min:number?,max:number?,allow_inf:boolean?,allow_nan:boolean?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.number(tbl)
 	tbl = tbl or {}
@@ -756,7 +756,7 @@ function AVCmds.number(tbl)
 end
 
 --- Wrapper around `AVCmds.number` but additional check to ensure a integer.
----@param tbl {min:integer?,max:integer?,allow_inf:boolean?,allow_nan:boolean?,cut_pat:string?,help:string,usage:string?}?
+---@param tbl {min:integer?,max:integer?,allow_inf:boolean?,allow_nan:boolean?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.integer(tbl)
 	tbl = tbl or {}
@@ -786,7 +786,7 @@ local BOOLEAN_MATCHS = {
 	["false"]=false, ["no"]=false, ["n"]=false,
 }
 --- - `strict` only allow "true" and "false", no other variants.
----@param tbl {strict:boolean?,cut_pat:string?,help:string,usage:string?}?
+---@param tbl {strict:boolean?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.boolean(tbl)
 	tbl = tbl or {}
@@ -811,7 +811,7 @@ function AVCmds.boolean(tbl)
 end
 
 --- Match everything, there is no rules.
----@param tbl {min:integer?,max:integer?,cut_pat:string?,help:string,usage:string?}?
+---@param tbl {min:integer?,max:integer?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.wildcard(tbl)
 	tbl = tbl or {}
@@ -861,7 +861,7 @@ end
 --- - `loose` do not check for braces.  
 --- - `seperator` the seperator charecter to use, space seperator is supported, default ",". 
 --- - `braces` string of 2 charecters for opening and closing of a array, default "[]".  
----@param tbl {[integer]:AVMatcher,[integer]:AVMatcher,n:integer?,min:integer?,max:integer?,strict:boolean?,loose:boolean?,seperator:string?,braces:string?,cut_pat:string?,help:string,usage:string?}
+---@param tbl {[integer]:AVMatcher,[integer]:AVMatcher,n:integer?,min:integer?,max:integer?,strict:boolean?,loose:boolean?,seperator:string?,braces:string?,cut_pat:string?,help:string?,usage:string?}
 ---@return AVMatcher
 function AVCmds.array(tbl)
 	AVCmds.assert(not (tbl.strict and tbl.loose), "AVCmds.array `strict` is not compatible with `loose`.")
@@ -956,14 +956,14 @@ function AVCmds.array(tbl)
 end
 
 --- If key and value matchers are omitted, defaults to parsing a lua table format.  
---- NOTE: `{` and `}` are invalid charecters to type in chat, ensure to set the braces acordingly, eg `braces="()"`  
+--- NOTE: `{` and `}` are invalid charecters to type in chat.  
 --- - `key` matcher to use for keys. (defaults to AVCmds.table_key)  
---- - `value` matcher to use for values. (defaults to AVCmds.table_value)  
---- - `braces` string of 2 charecters for opening and closing of a table, default "{}", make sure to change this!  
----@param tbl {key:AVMatcher?,value:AVMatcher?,seperator:string?,braces:string,cut_pat:string?,help:string,usage:string?}
+--- - `value` matcher to use for values. (defaults to AVCmds.value)  
+--- - `braces` string of 2 charecters for opening and closing of a table, default "()".
+---@param tbl {key:AVMatcher?,value:AVMatcher?,seperator:string?,braces:string?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.table(tbl)
-	error("TODO")
+	tbl = tbl or {}
 	AVCmds.assert(tbl.braces == nil or #tbl.braces == 2, "AVCmds.table `braces` should be of length 2.")
 	AVCmds.assert(tbl.key == nil, "AVCmds.table key matchers are not supported yet.")
 	AVCmds.assert(tbl.value == nil, "AVCmds.table value matchers are not supported yet.")
@@ -984,7 +984,7 @@ end
 --- - `braces` - string of 2 charecters for opening and closing of a table key, default "[]"
 --- A handy matcher for table keys.  
 --- Matches a simple string or a AVCmds.value wrapped in square braces.  
----@param tbl {braces:string?,cut_pat:string?,help:string,usage:string?}?
+---@param tbl {braces:string?,cut_pat:string?,help:string?,usage:string?}?
 function AVCmds.table_key(tbl)
 	tbl = tbl or {}
 	AVCmds.assert(tbl.braces == nil or #tbl.braces == 2, "AVCmds.table `braces` should be of length 2.")
@@ -1037,14 +1037,14 @@ function AVCmds.table_key(tbl)
 	}
 end
 
---- A handy matcher for primative lua values.
---- This includes: numbers, strings, tables and arrays.  
----@param tbl {help:string,usage:string?}
+--- A handy shortcut for lua value matchers.  
+--- This includes: numbers, strings, tables.  
+---@param tbl {table_braces:string?,cut_pat:string?,help:string?,usage:string?}?
 function AVCmds.value(tbl)
 	error("TODO")
 	---@type AVMatcher
 	return {
-		usage=tbl.usage or "value",
+		usage=tbl.usage or "lua value",
 		help=tbl.help,
 		match=function(self, raw, pos, cut)
 			error("TODO")
@@ -1055,7 +1055,7 @@ end
 --- - [1] the flag, eg "f" or "flag"
 --- - [2] value matcher, required for `--flag=value`, default boolean.
 --- - [3] default value, default `false`, required when using value matcher.
----@param tbl {[1]:string,[2]:AVMatcher,[3]:any,help:string,usage:string?}
+---@param tbl {[1]:string,[2]:AVMatcher,[3]:any,cut_pat:string?,help:string?,usage:string?}
 ---@return AVMatcher
 function AVCmds.flag(tbl)
 	error("TODO")
@@ -1069,11 +1069,11 @@ function AVCmds.flag(tbl)
 	}
 end
 
----@param tbl {help:string,usage:string?}?
+---@param tbl {cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.player(tbl)
 	tbl = tbl or {}
-	local matcher = AVCmds.string{help=tbl.help,usage=tbl.usage}
+	local matcher = AVCmds.string{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
 	---@type AVMatcher
 	return {
 		usage=tbl.usage or "player",
@@ -1105,12 +1105,12 @@ function AVCmds.player(tbl)
 	}
 end
 
----@param tbl {help:string,usage:string?}?
+---@param tbl {cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.position(tbl)
 	tbl = tbl or {}
-	local matcher_player = AVCmds.player{help=tbl.help,usage=tbl.usage}
-	local matcher_number = AVCmds.number{help=tbl.help,usage=tbl.usage}
+	local matcher_player = AVCmds.player{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
+	local matcher_number = AVCmds.number{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
 	---@type AVMatcher
 	return {
 		usage=tbl.usage or "position",
