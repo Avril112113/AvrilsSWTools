@@ -1,6 +1,5 @@
 local GroupResults = require "avtest.groupresults"
 local StdHook = require "avtest.std_hook"
-
 local TestEnv = require "avtest.test_env"
 
 
@@ -36,8 +35,9 @@ end
 --- If recursive, sub-dirs have their own test group created.
 ---@param path string
 ---@param recursive boolean
+---@param filter (fun(path:string):boolean)?
 ---@return Group[]
-function Group:loadFolder(path, recursive)
+function Group:loadFolder(path, recursive, filter)
 	error("Not implemented: TestGroup:loadFolder")
 end
 
@@ -85,40 +85,18 @@ function Group:addTest(test)
 	return test
 end
 
----@param filter string[][]?
----@param depth integer?
-function Group:runTests(filter, depth)
-	depth = depth or 1
+---@param filter (fun(obj:Test|Group):boolean)?
+function Group:runTests(filter)
 	local results = GroupResults.new(self)
 	for _, test in ipairs(self.tests) do
-		if filter then
-			for _, path in ipairs(filter) do
-				if path[depth] == test.name then
-					goto run
-				end
-			end
-			goto continue
+		if not filter or filter(test) then
+			results:addTestResult(test:runTest())
 		end
-		::run::
-		results:addTestResult(test:runTest())
-		::continue::
 	end
 	for _, subgroup in ipairs(self.groups) do
-		local pass_filters = true
-		if filter then
-			for _, path in ipairs(filter) do
-				if path[depth] == subgroup.name then
-					if #path == depth then
-						pass_filters = false
-					end
-					goto run
-				end
-			end
-			goto continue
+		if not filter or filter(subgroup) then
+			results:addGroupResults(subgroup:runTests(filter))
 		end
-		::run::
-		results:addGroupResults(subgroup:runTests(pass_filters and filter or nil, depth+1))
-		::continue::
 	end
 	return results
 end
