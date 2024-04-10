@@ -62,5 +62,58 @@ AVCmds.createCommand {name="test"}
 	}
 ```
 
+```lua
+-- A `?savedata` command for reading or modifying g_savedata
 
-To run the tests, ensure lua is installed and run `lua test/test.lua tests/cmds.lua`.  
+g_savedata = {}
+g_savedata.somedata = {123, "456", [123]="potato"}
+
+AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+AVCmds.createCommand {name="savedata"}
+	:registerGlobalCommand()
+	:addHandler {
+		AVCmds.index(),
+		AVCmds.if_{AVCmds.const{"="}, AVCmds.value()},
+		---@param ctx AVCommandContext
+		---@param path any[]|{raw:string}
+		---@param value any
+		function(ctx, path, value)
+			local part = g_savedata
+			for i=1,#path-1 do
+				local key = path[i]
+				part = part[key]
+				if type(part) ~= "table" then
+					part = {}
+				end
+			end
+			local prefix
+			if value == nil then
+				value = part and part[path[#path]] or nil
+				prefix = "GET"
+			else
+				part[path[#path]] = value
+				prefix = "SET"
+			end
+			-- You can replace `tostring` with something that handles tables better.
+			local value_str = tostring(value)
+			local sep = (value_str:find("\n") or #value_str > 23) and "\n" or " "
+			AVCmds.response{ctx, prefix, path.raw, "=" .. sep .. value_str}
+		end
+	}
+
+--[[
+	Example usages:
+		?savedata somedata
+		?savedata ['somedata']
+		?savedata somedata[1]
+		?savedata somedata[2]
+		?savedata somedata[123]
+
+		?savedata n = 123
+		?savedata foo = ()
+		?savedata foo.bar = 123
+]]
+```
+
+
+To run the tests, ensure lua 5.3+ is installed and run `lua test/test.lua tests/cmds.lua`.  

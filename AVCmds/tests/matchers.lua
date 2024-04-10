@@ -347,6 +347,29 @@ TEST.addTest("matchers-or", function()
 	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.OR_FAILED}, AVCmds.onCustomCommand("?test", 0)))
 end)
 
+TEST.addTest("matchers-table", function()
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.table(),
+			gen_default_handler("arg test table")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={{}}}, AVCmds.onCustomCommand("?test ()", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{}}}, AVCmds.onCustomCommand("?test ( )", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{1, 2, 3}}}, AVCmds.onCustomCommand("?test (1, 2, 3)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{1, 2, 3}}}, AVCmds.onCustomCommand("?test (1,2,3)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{a=4, b=5, c=6}}}, AVCmds.onCustomCommand("?test (a=4, b=5, c=6)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{[true]=7, ['str']=8}}}, AVCmds.onCustomCommand("?test ([true]=7, ['str']=8)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{1, 2, 3, a=4, b=5, c=6, [true]=7, ['str']=8}}}, AVCmds.onCustomCommand("?test (1, 2, 3, a=4, b=5, c=6, [true]=7, ['str']=8)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{a=4, b=5, c=6, [true]=7, ['str']=8}}}, AVCmds.onCustomCommand("?test ( a = 4 , b = 5 , c = 6 , [ true ] = 7 , [ 'str' ] = 8 )", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{{'depth..'}}}}, AVCmds.onCustomCommand("?test (('depth..'))", 0)))
+	-- TODO: Don't use balanced `%b` pattern for tables, because the below cases fail.
+	TEST.check(Utils.cmd_expect({handled=true,args={{1, 'close in string )', 2}}}, AVCmds.onCustomCommand("?test (1, 'close in string )', 2)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{1, 'open in string (', 2}}}, AVCmds.onCustomCommand("?test (1, 'close in string (', 2)", 0)))
+end)
+
 TEST.addTest("matchers-table_key", function()
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 	AVCmds.createCommand {name="test"}
@@ -365,4 +388,27 @@ TEST.addTest("matchers-table_key", function()
 	TEST.check(Utils.cmd_expect({handled=true,args={"valid space"}}, AVCmds.onCustomCommand("?test [ 'valid space' ]", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={456}}, AVCmds.onCustomCommand("?test [ 456 ]", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test [ false ]", 0)))
+end)
+
+TEST.addTest("matchers-value", function()
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.value(),
+			gen_default_handler("arg test value")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={"str"}}, AVCmds.onCustomCommand("?test 'str'", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={123}}, AVCmds.onCustomCommand("?test 123", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test true", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{1, 2, 3}}}, AVCmds.onCustomCommand("?test (1, 2, 3)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{1, 2, 3}}}, AVCmds.onCustomCommand("?test (1,2,3)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{a=4, b=5, c=6}}}, AVCmds.onCustomCommand("?test (a=4, b=5, c=6)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{[true]=7, ['str']=8}}}, AVCmds.onCustomCommand("?test ([true]=7, ['str']=8)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{1, 2, 3, a=4, b=5, c=6, [true]=7, ['str']=8}}}, AVCmds.onCustomCommand("?test (1, 2, 3, a=4, b=5, c=6, [true]=7, ['str']=8)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{a=4, b=5, c=6, [true]=7, ['str']=8}}}, AVCmds.onCustomCommand("?test ( a = 4 , b = 5 , c = 6 , [ true ] = 7 , [ 'str' ] = 8 )", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{{'depth..'}}}}, AVCmds.onCustomCommand("?test (('depth..'))", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_LUA_VALUE}, AVCmds.onCustomCommand("?test no", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.BAD_LUA_VALUE}, AVCmds.onCustomCommand("?test simplestr", 0)))
 end)

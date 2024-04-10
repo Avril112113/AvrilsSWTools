@@ -86,10 +86,60 @@ end)
 
 
 TEST.addTest("3", function ()
+	-- A `?savedata` command for reading or modifying g_savedata
+
+	local g_savedata = {}
+	g_savedata.somedata = {123, "456", [123]="potato"}
+
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 	AVCmds.createCommand {name="savedata"}
 		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.index(),
+			AVCmds.if_{AVCmds.const{"="}, AVCmds.value()},
+			---@param ctx AVCommandContext
+			---@param path any[]|{raw:string}
+			---@param value any
+			function(ctx, path, value)
+				local part = g_savedata
+				for i=1,#path-1 do
+					local key = path[i]
+					part = part[key]
+					if type(part) ~= "table" then
+						part = {}
+					end
+				end
+				local prefix
+				if value == nil then
+					value = part and part[path[#path]] or nil
+					prefix = "GET"
+				else
+					part[path[#path]] = value
+					prefix = "SET"
+				end
+				-- You can replace `tostring` with something that handles tables better.
+				local value_str = tostring(value)
+				local sep = (value_str:find("\n") or #value_str > 23) and "\n" or " "
+				AVCmds.response{ctx, prefix, path.raw, "=" .. sep .. value_str}
+			end
+		}
 
-	error("TODO: All the stuff for a savedata command.")
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="somedata", "somedata"}}}, AVCmds.onCustomCommand("?savedata somedata", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="somedata", "somedata"}}}, AVCmds.onCustomCommand("?savedata [ 'somedata' ]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="somedata[1]", "somedata", 1}}}, AVCmds.onCustomCommand("?savedata somedata[1]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="somedata[2]", "somedata", 2}}}, AVCmds.onCustomCommand("?savedata somedata[2]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="somedata[123]", "somedata", 123}}}, AVCmds.onCustomCommand("?savedata somedata[123]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="somedata[123]", "somedata", 123}}}, AVCmds.onCustomCommand("?savedata ['somedata'][123]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="[123]", 123}}}, AVCmds.onCustomCommand("?savedata [123]", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="a.b.c", "a", "b", "c"}}}, AVCmds.onCustomCommand("?savedata a.b.c", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="somedata[123].foo", "somedata", 123, "foo"}}}, AVCmds.onCustomCommand("?savedata somedata[123].foo ", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="somedata[123].foo", "somedata", 123, "foo"}}}, AVCmds.onCustomCommand("?savedata somedata [ 123 ] . foo ", 0)))
+
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="n", "n"}, 123}}, AVCmds.onCustomCommand("?savedata n = 123", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="n", "n"}}}, AVCmds.onCustomCommand("?savedata n", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="foo", "foo"}, {}}}, AVCmds.onCustomCommand("?savedata foo = ()", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="foo", "foo"}}}, AVCmds.onCustomCommand("?savedata foo", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="foo.bar", "foo", "bar"}, 123}}, AVCmds.onCustomCommand("?savedata foo.bar = 123", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={{raw="foo.bar", "foo", "bar"}}}, AVCmds.onCustomCommand("?savedata foo.bar", 0)))
 end)
 

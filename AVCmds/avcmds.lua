@@ -1,5 +1,5 @@
 --- Avrils Commands Library
---- Version: 0.2.0
+--- Version: 0.3.0
 
 --[[
 	Terminology:
@@ -126,6 +126,7 @@ AVCmds.MATCH_ERRORS = {
 	BAD_TABLE="BAD_TABLE",
 	BAD_TABLE_COUNT="BAD_TABLE_COUNT",
 	BAD_TABLE_KEY="BAD_TABLE_KEY",
+	BAD_INDEX="BAD_INDEX",
 	BAD_LUA_VALUE="BAD_LUA_VALUE",
 	BAD_PLAYER="BAD_PLAYER",
 	BAD_POSITION="BAD_POSITION",
@@ -971,20 +972,71 @@ function AVCmds.table(tbl)
 	local braces = tbl.braces or "()"
 	local open = braces:sub(1, 1)
 	local close = braces:sub(2, 2)
+	local braces_pat = "^%b" .. open .. close
+	local key_matcher = AVCmds.table_key{}
+	local value_matcher
 	---@type AVMatcher
 	return {
 		usage=tbl.usage or "table",
 		help=tbl.help,
 		match=function(self, raw, pos, cut)
-			error("TODO")
+			value_matcher = value_matcher or AVCmds.value{__table_matcher=self}
+			local match = raw:match(braces_pat, pos)
+			if match == nil then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_TABLE,
+					msg=("Missing table brace pair '%s%s'."):format(open, close),
+				}
+			end
+			local cut_value, finish = raw:match(AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos+#match)
+			if cut_value == nil then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=pos+#match, err=AVCmds.MATCH_ERRORS.BAD_TABLE_KEY,
+					msg="Missing cut value.",
+				}
+			end
+
+			local value = {}
+			local mpos = pos+#open
+			while true do
+				mpos = raw:match("^ *()", mpos) or mpos
+				if raw:sub(mpos, mpos) == ")" then
+					break
+				end
+				local key_match = key_matcher:match(raw, mpos, " *= *")
+				if not key_match.err then
+					mpos = key_match.finish
+					mpos = raw:match("^ *()", mpos) or mpos
+				end
+				local value_match = value_matcher:match(raw, mpos, " *[" .. escape_pattern(seperator) .. escape_pattern(close) .. "]")
+				if value_match.err then
+					return value_match
+				end
+				mpos = value_match.finish
+				mpos = raw:match("^ *()", mpos) or mpos
+
+				local key = key_match.value
+				if key_match.err then
+					key = #value+1
+				end
+				value[key] = value_match.value
+				if raw:sub(value_match.finish-1, value_match.finish-1) == close then
+					break
+				end
+			end
+			---@type AVMatchValue
+			return {matcher=self, start=pos, finish=finish, raw=raw, cut=cut_value, value=value}
 		end,
 	}
 end
 
 --- - `braces` - string of 2 charecters for opening and closing of a table key, default "[]"
+--- - `strict` - disables simple string as a key
 --- A handy matcher for table keys.  
 --- Matches a simple string or a AVCmds.value wrapped in square braces.  
----@param tbl {braces:string?,cut_pat:string?,help:string?,usage:string?}?
+---@param tbl {braces:string?,strict:boolean?,cut_pat:string?,help:string?,usage:string?}?
 function AVCmds.table_key(tbl)
 	tbl = tbl or {}
 	AVCmds.assert(tbl.braces == nil or #tbl.braces == 2, "AVCmds.table `braces` should be of length 2.")
@@ -1003,16 +1055,18 @@ function AVCmds.table_key(tbl)
 		usage=tbl.usage or "table key",
 		help=tbl.help,
 		match=function(self, raw, pos, cut)
-			local result = simple_matcher:match(raw, pos, cut)
-			if not result.err then
-				return result
+			if tbl.strict ~= true then
+				local result = simple_matcher:match(raw, pos, cut)
+				if not result.err then
+					return result
+				end
 			end
 			local match = raw:match(braces_pat, pos)
 			if match == nil then
 				---@type AVMatchError
 				return {
 					matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_TABLE_KEY,
-					msg=("Missing table_key opening brace '%s'."):format(open),
+					msg=("Missing table_key brace pair '%s%s'."):format(open, close),
 				}
 			end
 			local cut_value, finish = raw:match(AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos+#match)
@@ -1024,7 +1078,7 @@ function AVCmds.table_key(tbl)
 				}
 			end
 			local inner_pos = raw:match("^ *()", pos+#open)
-			result = value_matcher:match(raw, inner_pos, " *"..escape_pattern(close))
+			local result = value_matcher:match(raw, inner_pos, " *"..escape_pattern(close))
 			if result.err then
 				---@type AVMatchError
 				return {
@@ -1032,22 +1086,118 @@ function AVCmds.table_key(tbl)
 					msg=("Invalid table_key value."):format(open),
 				}
 			end
+			result.finish = finish
 			return result
+		end,
+	}
+end
+
+---@alias AVIndexMatchValue string[]|{raw:string}
+---@param tbl {[1]:string,cut_pat:string?,help:string?,usage:string?}?
+---@return AVMatcher
+function AVCmds.index(tbl)
+	tbl = tbl or {}
+	local table_key_matcher = AVCmds.table_key{strict=true}
+	---@type AVMatcher
+	return {
+		usage=tbl.usage or "lua index",
+		help=tbl.help,
+		match=function(self, raw, pos, cut)
+			---@type AVIndexMatchValue
+			local path = {}
+			local raw_parts = {}
+			local ipos = pos
+			while true do
+				local cpos, char = raw:match("^ *%.? *()([%w_[])", ipos)
+				if char == nil then
+					break
+				end
+				ipos = cpos
+
+				local value
+				if char == "[" then
+					local result = table_key_matcher:match(raw, ipos, "[.[ ]")
+					if result.err then
+						break
+					end
+					value = result.value
+					ipos = result.finish-1
+				else
+					local match, finish = raw:match("^([%w_][%w_0-9]*)()", ipos)
+					if match == nil then
+						break
+					end
+					value = match
+					ipos = finish
+				end
+				if type(value) == "string" and value:match("^[%w_][%w_0-9]*$") then
+					if #raw_parts > 0 then
+						table.insert(raw_parts, ".")
+					end
+					table.insert(raw_parts, value)
+				else
+					local s
+					if type(value) == "string" then
+						local q = value:find("\"") and "'" or "\""
+						s = q..value..q
+					else
+						s = tostring(value)
+					end
+					table.insert(raw_parts, ("[%s]"):format(s))
+				end
+				table.insert(path, value)
+			end
+			path.raw = table.concat(raw_parts, "")
+			if raw:sub(ipos-1, ipos-1) == " " then
+				ipos = ipos - 1
+			end
+			local cut_value, finish = raw:match(AVCmds._check_cut(cut, tbl.cut_pat, " ()"), ipos)
+			if cut_value == nil then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_INDEX,
+					msg="Missing cut value.",
+				}
+			end
+			if #path <= 0 then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=finish, err=AVCmds.MATCH_ERRORS.BAD_INDEX,
+					msg="Missing lua indexing.",
+				}
+			end
+			---@type AVMatchValue
+			return {matcher=self, start=pos, finish=finish, raw=raw, cut=cut_value, value=path}
 		end,
 	}
 end
 
 --- A handy shortcut for lua value matchers.  
 --- This includes: numbers, strings, tables.  
----@param tbl {table_braces:string?,cut_pat:string?,help:string?,usage:string?}?
+---@param tbl {table_braces:string?,cut_pat:string?,help:string?,usage:string?,__table_matcher:AVMatcher?}?
 function AVCmds.value(tbl)
-	error("TODO")
+	tbl = tbl or {}
+	local value_matcher = AVCmds.or_{
+		AVCmds.string{cut_pat=tbl.cut_pat, strict=true},
+		AVCmds.boolean{cut_pat=tbl.cut_pat, strict=true},
+		AVCmds.number{cut_pat=tbl.cut_pat, allow_inf=true, allow_nan=true},
+		tbl.__table_matcher or AVCmds.table{cut_pat=tbl.cut_pat, braces=tbl.table_braces},
+	}
 	---@type AVMatcher
 	return {
 		usage=tbl.usage or "lua value",
 		help=tbl.help,
 		match=function(self, raw, pos, cut)
-			error("TODO")
+			local match = value_matcher:match(raw, pos, cut)
+			if not match.err then
+				return match
+			end
+			print(match.msg)
+			---@type AVMatchError
+			return {
+				matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_LUA_VALUE,
+				msg="Invalid lua value.",
+			}
 		end,
 	}
 end
@@ -1170,7 +1320,7 @@ function AVCmds.optional(matcher, default)
 			local result = matcher:match(raw, pos, cut)
 			if result.err then
 				---@type AVMatchValue
-				return {matcher=self, start=pos, finish=pos, raw="", cut="", value=default()}
+				return {matcher=self, start=pos, finish=pos, raw=raw, cut="", value=default()}
 			end
 			return result
 		end,
@@ -1197,18 +1347,116 @@ function AVCmds.or_(tbl)
 		help=tbl.help or table.concat(help_parts, "\n\n"),
 		match=function(self, raw, pos, cut)
 			local msgs = {}
+			local errs = {}
+			local err_pos = pos
 			for _, matcher in ipairs(tbl) do
 				local result = matcher:match(raw, pos, cut)
 				if not result.err then
 					return result
 				end
+				if result.pos > err_pos then
+					err_pos = result.pos
+					msgs = {}
+				end
+				---@diagnostic disable-next-line: undefined-field
 				table.insert(msgs, result.msg)
+				table.insert(errs, result)
 			end
 			---@type AVMatchError
 			return {
-				matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.OR_FAILED,
+				matcher=self, pos=err_pos, err=AVCmds.MATCH_ERRORS.OR_FAILED,
 				msg="& " .. table.concat(msgs, "\n& "),
+				or_errs=errs,
 			}
+		end,
+	}
+end
+
+--- Ensures all matchers are matched.
+--- If first value is integer, that index is used as the argument value.
+--- Otherwise, the argument value is an array of values for each matcher.
+---@param tbl {[1]:integer|AVMatcher,[integer]:AVMatcher,help:string?,usage:string?}
+---@return AVMatcher
+function AVCmds.and_(tbl)
+	AVCmds.assert(#tbl >= 2, "AVCmds.and_ requires 2 or more matchers.")
+	local usage_parts = {}
+	local help_parts = {}
+	for _, matcher in ipairs(tbl) do
+		if type(matcher) == "table" then
+			if matcher.usage then
+				table.insert(usage_parts, matcher.usage)
+			end
+			if matcher.help then
+				table.insert(help_parts, matcher.help)
+			end
+		end
+	end
+	local result_index = tbl[1]
+	if result_index and result_index < 0 then
+		result_index = math.max(#tbl + result_index, 1)
+	end
+	---@type AVMatcher
+	return {
+		usage=tbl.usage or ("(" .. ("%s"):format(table.concat(usage_parts, " ")) .. ")"),
+		help=tbl.help or table.concat(help_parts, "\n\n"),
+		match=function(self, raw, pos, cut)
+			---@type AVMatcherResult[]
+			local results = {}
+			local values = {}
+			local mpos = pos
+			for _, matcher in ipairs(tbl) do
+				if type(matcher) ~= "number" then
+					local result = matcher:match(raw, raw:match("^ *()", mpos), cut)
+					if result.err then
+						print(result.pos)
+						return result
+					end
+					table.insert(results, result)
+					table.insert(values, result.value)
+					mpos = result.finish
+				end
+			end
+			if result_index then
+				return results[result_index]
+			end
+			---@type AVMatchValue
+			return {matcher=self, start=pos, finish=results[#results].finish, raw=raw, cut=results[#results].cut, value=values}
+		end,
+	}
+end
+
+--- If the first matcher does not fail, use the 2nd matcher, otherwise the 3rd.
+--- 3rd matcher is optional, in this case an empty result is returned.
+---@param tbl {[1]:AVMatcher,[2]:AVMatcher,[3]:AVMatcher?,help:string?,usage:string?}
+---@return AVMatcher
+function AVCmds.if_(tbl)
+	AVCmds.assert(#tbl == 2 or #tbl == 3, "AVCmds.if_ requires 2 or 3 matchers.")
+	local usage_parts = {}
+	local help_parts = {}
+	for _, matcher in ipairs(tbl) do
+		if type(matcher) == "table" then
+			if matcher.usage then
+				table.insert(usage_parts, matcher.usage)
+			end
+			if matcher.help then
+				table.insert(help_parts, matcher.help)
+			end
+		end
+	end
+	---@type AVMatcher
+	return {
+		usage=tbl.usage or ("(" .. ("%s"):format(table.concat(usage_parts, " ")) .. ")"),
+		help=tbl.help or table.concat(help_parts, "\n\n"),
+		match=function(self, raw, pos, cut)
+			local cond_result = tbl[1]:match(raw, pos, cut)
+			if cond_result.err then
+				if tbl[3] then
+					return tbl[3]:match(raw, pos, cut)
+				end
+				---@type AVMatchValue
+				return {matcher=self, start=pos, finish=pos, raw=raw, cut="", value=nil}
+			end
+			return tbl[2]:match(raw, raw:match("^ *()", cond_result.finish), cut)
 		end,
 	}
 end
