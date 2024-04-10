@@ -1,6 +1,9 @@
 # AVCmds
 A full commands parser for Stormworks.  
 
+Simply copy `avcmds.lua` and then `require("avcmds")`, if using a tool that combines files.  
+Otherwise, just copy the contents of `avcmds.lua` into the top of your `script.lua`.  
+
 See `/tests/cmds.lua` for full usage examples.  
 
 ```lua
