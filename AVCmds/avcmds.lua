@@ -1267,14 +1267,15 @@ AVCmds.coordinate_default_relative_pos = function(ctx)
 end
 --- Coordinate matcher returns a table of 3 values, as look direction (`^`) can affect any axis.
 ---@param tbl {axis:"x"|"y"|"z",relative_pos:AVCoordinateRelativePosFunc?,cut_pat:string?,help:string?,usage:string?}
----@return AVMatcher
+---@return AVMatcher.coordinate
 function AVCmds.coordinate(tbl)
 	AVCmds.assert(tbl.axis, "AVCmds.coordinate `axis` is required but missing.")
 	tbl.relative_pos = tbl.relative_pos or AVCmds.coordinate_default_relative_pos
 	local axis_i = (tbl.axis == "x" and 1) or (tbl.axis == "y" and 2) or 3
 	local pattern_prefix = "^([~^]?)()"
 	local number_matcher = AVCmds.number{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
-	---@type AVMatcher
+	---@class AVMatcher.coordinate : AVMatcher
+	---@field match fun(self, ctx:AVCommandContext, raw:string, pos:integer, cut:string?):AVMatchError|(AVMatchValue|{prefix:string})
 	return {
 		usage=tbl.usage or "coordinate",
 		help=tbl.help,
@@ -1282,7 +1283,6 @@ function AVCmds.coordinate(tbl)
 			local prefix_match, pos = raw:match(pattern_prefix, pos)
 			local n_match = number_matcher:match(ctx, raw, pos, " *[ ,] *")
 			local value, finish, cut_value
-			local used_carrot = false
 			if n_match.err then
 				if #prefix_match > 0 then
 					value = {0, 0, 0}
@@ -1334,8 +1334,6 @@ function AVCmds.coordinate(tbl)
 					(rot_m[2]*value[1]) + (rot_m[5]*value[2]) + (rot_m[8]*value[3]),
 					(rot_m[3]*value[1]) + (rot_m[6]*value[2]) + (rot_m[9]*value[3])
 				}
-
-				used_carrot = true
 			end
 			-- All prefixes set from player position
 			if #prefix_match > 0 then
@@ -1348,8 +1346,11 @@ function AVCmds.coordinate(tbl)
 				end
 				value[axis_i] = value[axis_i] + rel_pos[axis_i]
 			end
-			---@type AVMatchValue
-			return {matcher=self, start=pos, finish=finish, raw=raw, cut=cut_value, value=value, used_carrot=used_carrot}
+			---@type AVMatchValue|{prefix:string?}
+			return {
+				matcher=self, start=pos, finish=finish, raw=raw, cut=cut_value, value=value,
+				prefix=#prefix_match > 0 and prefix_match or nil,  -- Custom info
+			}
 		end,
 	}
 end
@@ -1357,7 +1358,7 @@ end
 ---@alias AVPositionCarrotPosFunc fun(ctx:AVCommandContext):{[1]:number,[2]:number,[3]:number}|string
 ---@type AVPositionCarrotPosFunc
 AVCmds.position_default_carrot_offset = function(ctx)
-	return {0,0.5,0}
+	return {0,0.6,0}
 end
 ---@param tbl {relative_pos:AVCoordinateRelativePosFunc?,carrot_offset:AVPositionCarrotPosFunc?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
@@ -1385,17 +1386,22 @@ function AVCmds.position(tbl)
 				if result_x.value and result_y and result_y.value and result_z and result_z.value then
 					result = result_z
 					position = {
-						result_x.value[1] + result_y.value[1] + result_z.value[1],
-						result_x.value[2] + result_y.value[2] + result_z.value[2],
-						result_x.value[3] + result_y.value[3] + result_z.value[3],
+						result_x.prefix and (result_x.value[1] + result_y.value[1] + result_z.value[1]) or result_x.value[1],
+						result_y.prefix and (result_x.value[2] + result_y.value[2] + result_z.value[2]) or result_y.value[2],
+						result_z.prefix and (result_x.value[3] + result_y.value[3] + result_z.value[3]) or result_z.value[3],
 					}
-					---@diagnostic disable-next-line: undefined-field
-					if tbl.carrot_offset and (result_x.used_carrot or result_y.used_carrot or result_z.used_carrot) then
+					if tbl.carrot_offset and (result_x.prefix == "^" or result_y.prefix == "^" or result_z.prefix == "^") then
 						local carrot_pos = tbl.carrot_offset(ctx)
 						if carrot_pos then
-							position[1] = position[1] + carrot_pos[1]
-							position[2] = position[2] + carrot_pos[2]
-							position[3] = position[3] + carrot_pos[3]
+							if result_x.prefix == "^" then
+								position[1] = position[1] + carrot_pos[1]
+							end
+							if result_y.prefix == "^" then
+								position[2] = position[2] + carrot_pos[2]
+							end
+							if result_z.prefix == "^" then
+								position[3] = position[3] + carrot_pos[3]
+							end
 						end
 					end
 				end
