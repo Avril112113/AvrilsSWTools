@@ -1,5 +1,5 @@
 --- Avrils Commands Library
---- Version: 0.3.2
+--- Version: 0.3.3
 
 --[[
 	Terminology:
@@ -1256,11 +1256,21 @@ function AVCmds.player(tbl)
 	}
 end
 
+---@alias AVCoordinateRelativePosFunc fun(ctx:AVCommandContext):{[1]:number,[2]:number,[3]:number}|string
+---@type AVCoordinateRelativePosFunc
+AVCmds.coordinate_default_relative_pos = function(ctx)
+	local player_matrix, found = server.getPlayerPos(ctx.player.id)
+	if not found then
+		return "Failed to get player position."
+	end
+	return {player_matrix[13], player_matrix[14], player_matrix[15]}
+end
 --- Coordinate matcher returns a table of 3 values, as look direction (`^`) can affect any axis.
----@param tbl {axis:"x"|"y"|"z",cut_pat:string?,help:string?,usage:string?}
+---@param tbl {axis:"x"|"y"|"z",relative_pos:AVCoordinateRelativePosFunc?,cut_pat:string?,help:string?,usage:string?}
 ---@return AVMatcher
 function AVCmds.coordinate(tbl)
 	AVCmds.assert(tbl.axis, "AVCmds.coordinate `axis` is required but missing.")
+	tbl.relative_pos = tbl.relative_pos or AVCmds.coordinate_default_relative_pos
 	local axis_i = (tbl.axis == "x" and 1) or (tbl.axis == "y" and 2) or 3
 	local pattern_prefix = "^([~^]?)()"
 	local number_matcher = AVCmds.number{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
@@ -1295,6 +1305,10 @@ function AVCmds.coordinate(tbl)
 				}
 				finish, cut_value = n_match.finish, n_match.cut
 			end
+			local rel_pos, offset
+			if #prefix_match > 0 then
+				rel_pos, offset = tbl.relative_pos(ctx)
+			end
 			if prefix_match == "^" then
 				local dx, dy, dz, found = server.getPlayerLookDirection(ctx.player.id)
 				if not found then
@@ -1318,22 +1332,21 @@ function AVCmds.coordinate(tbl)
 				value = {
 					(rot_m[1]*value[1]) + (rot_m[4]*value[2]) + (rot_m[7]*value[3]),
 					(rot_m[2]*value[1]) + (rot_m[5]*value[2]) + (rot_m[8]*value[3]),
-					(-rot_m[3]*value[1]) + (rot_m[6]*value[2]) + (rot_m[9]*value[3])
+					(rot_m[3]*value[1]) + (rot_m[6]*value[2]) + (rot_m[9]*value[3])
 				}
 
 				used_carrot = true
 			end
 			-- All prefixes set from player position
 			if #prefix_match > 0 then
-				local player_matrix, found = server.getPlayerPos(ctx.player.id)
-				if not found then
+				if type(rel_pos) == "string" then
 					---@type AVMatchError
 					return {
 						matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_COORDINATE,
-						msg=("Failed to get player position."),
+						msg=rel_pos,
 					}
 				end
-				value[axis_i] = value[axis_i] + player_matrix[13+axis_i-1]
+				value[axis_i] = value[axis_i] + rel_pos[axis_i]
 			end
 			---@type AVMatchValue
 			return {matcher=self, start=pos, finish=finish, raw=raw, cut=cut_value, value=value, used_carrot=used_carrot}
@@ -1341,15 +1354,20 @@ function AVCmds.coordinate(tbl)
 	}
 end
 
----@param tbl {carrot_offset:{[1]:number,[2]:number,[3]:number}?,cut_pat:string?,help:string?,usage:string?}?
+---@alias AVPositionCarrotPosFunc fun(ctx:AVCommandContext):{[1]:number,[2]:number,[3]:number}|string
+---@type AVPositionCarrotPosFunc
+AVCmds.position_default_carrot_offset = function(ctx)
+	return {0,0.5,0}
+end
+---@param tbl {relative_pos:AVCoordinateRelativePosFunc?,carrot_offset:AVPositionCarrotPosFunc?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.position(tbl)
 	tbl = tbl or {}
-	tbl.carrot_offset = tbl.carrot_offset or {0,0.5,0}
+	tbl.carrot_offset = tbl.carrot_offset or AVCmds.position_default_carrot_offset
 	local player_matcher = AVCmds.player{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
-	local x_matcher = AVCmds.coordinate{axis="x", cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
-	local y_matcher = AVCmds.coordinate{axis="y", cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
-	local z_matcher = AVCmds.coordinate{axis="z", cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
+	local x_matcher = AVCmds.coordinate{axis="x", relative_pos=tbl.relative_pos, cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
+	local y_matcher = AVCmds.coordinate{axis="y", relative_pos=tbl.relative_pos, cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
+	local z_matcher = AVCmds.coordinate{axis="z", relative_pos=tbl.relative_pos, cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
 	---@type AVMatcher
 	return {
 		usage=tbl.usage or "position",
@@ -1372,10 +1390,13 @@ function AVCmds.position(tbl)
 						result_x.value[3] + result_y.value[3] + result_z.value[3],
 					}
 					---@diagnostic disable-next-line: undefined-field
-					if result_x.used_carrot or result_y.used_carrot or result_z.used_carrot then
-						position[1] = position[1] + tbl.carrot_offset[1]
-						position[2] = position[2] + tbl.carrot_offset[2]
-						position[3] = position[3] + tbl.carrot_offset[3]
+					if tbl.carrot_offset and (result_x.used_carrot or result_y.used_carrot or result_z.used_carrot) then
+						local carrot_pos = tbl.carrot_offset(ctx)
+						if carrot_pos then
+							position[1] = position[1] + carrot_pos[1]
+							position[2] = position[2] + carrot_pos[2]
+							position[3] = position[3] + carrot_pos[3]
+						end
 					end
 				end
 			end
