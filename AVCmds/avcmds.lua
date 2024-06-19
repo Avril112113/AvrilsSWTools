@@ -30,7 +30,6 @@
 --[[ Grand TODO list:
 	Remove all TODO's within the code.
 	Solve all FIXME's within the code.
-	Add lua path matcher, eg, for savedata command "foo.bar[123]['baz bee']"
 ]]
 
 
@@ -1391,10 +1390,7 @@ function AVCmds.and_(tbl)
 			end
 		end
 	end
-	local result_index = tbl[1]
-	if result_index and result_index < 0 then
-		result_index = math.max(#tbl + result_index, 1)
-	end
+	local result_index = type(tbl[1]) == "number" and tbl[1] or nil
 	---@type AVMatcher
 	return {
 		usage=tbl.usage or ("(" .. ("%s"):format(table.concat(usage_parts, " ")) .. ")"),
@@ -1408,7 +1404,6 @@ function AVCmds.and_(tbl)
 				if type(matcher) ~= "number" then
 					local result = matcher:match(raw, raw:match("^ *()", mpos), cut)
 					if result.err then
-						print(result.pos)
 						return result
 					end
 					table.insert(results, result)
