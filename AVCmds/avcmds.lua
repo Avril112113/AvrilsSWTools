@@ -1,5 +1,5 @@
 --- Avrils Commands Library
---- Version: 0.3.0
+--- Version: 0.3.2
 
 --[[
 	Terminology:
@@ -53,7 +53,7 @@
 ---@class AVMatcher
 ---@field usage string # type name for this matcher, used for usage info, this can be anything.
 ---@field help string? # Argument help info.
----@field match fun(self, raw:string, pos:integer, cut:string?):AVMatcherResult
+---@field match fun(self, ctx:AVCommandContext, raw:string, pos:integer, cut:string?):AVMatcherResult
 
 ---@class AVCommandContext
 ---@field handler AVCommandHandlerTbl?  # The corosponding handler from command.
@@ -106,6 +106,7 @@ AVCmds._SERVER_PLAYER = {
 	admin=true,
 	auth=true,
 	steam_id=0,
+	object_id=-1,
 }
 
 ---@enum AVMatchErrorCode
@@ -128,6 +129,7 @@ AVCmds.MATCH_ERRORS = {
 	BAD_INDEX="BAD_INDEX",
 	BAD_LUA_VALUE="BAD_LUA_VALUE",
 	BAD_PLAYER="BAD_PLAYER",
+	BAD_COORDINATE="BAD_COORDINATE",
 	BAD_POSITION="BAD_POSITION",
 	OR_FAILED="OR_FAILED",
 	UNKNOWN="UNKNOWN",
@@ -470,7 +472,7 @@ function AVCmds.createCommand(tbl)
 					AVCmds.assert(type(i) == "number", "non-positionals are not yet supported.")
 				end
 				for i=1,#handler-1 do
-					local match = handler[i]:match(raw, pos_parse)
+					local match = handler[i]:match(ctx, raw, pos_parse)
 					ctx.argsData[i] = match
 					if match.err ~= nil then
 						---@cast match AVMatchError
@@ -611,7 +613,7 @@ function AVCmds.const(tbl)
 	return {
 		usage=tbl.usage or ("'%s'"):format(tbl[1]),
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			local match, cut_value, finish = raw:match(pattern .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
 			if match then
 				---@type AVMatchValue
@@ -645,7 +647,7 @@ function AVCmds.string(tbl)
 	return {
 		usage=tbl.usage or (tbl.strict and "q-string" or tbl.simple and "s-string" or "string"),
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			local match, cut_value, finish, value, msg
 			local char = raw:sub(pos, pos)
 			if CHAR_TO_PAT[char] then
@@ -714,7 +716,7 @@ function AVCmds.number(tbl)
 	return {
 		usage=tbl.usage or "number",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			local match, cut_value, finish = raw:match(pattern_simple .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
 			if match ~= nil then
 				local value
@@ -763,8 +765,8 @@ function AVCmds.integer(tbl)
 	local matcher = AVCmds.number(tbl)
 	matcher.usage = tbl.usage or "integer"
 	local original_match = matcher.match
-	matcher.match = function(self, raw, pos)
-		local result = original_match(self, raw, pos)
+	matcher.match = function(self, ctx, raw, pos)
+		local result = original_match(self, ctx, raw, pos)
 		if result.err then
 			return result
 		end
@@ -795,7 +797,7 @@ function AVCmds.boolean(tbl)
 	return {
 		usage=tbl.usage or "boolean",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			local match, cut_value, finish = raw:match(pattern .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
 			if not match or (tbl.strict and match ~= "true" and match ~= "false") or (BOOLEAN_MATCHS[match] == nil) then
 				---@type AVMatchError
@@ -820,7 +822,7 @@ function AVCmds.wildcard(tbl)
 	return {
 		usage=tbl.usage or "wildcard*",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			local match, cut_value, finish = raw:match(pattern .. AVCmds._check_cut(cut, tbl.cut_pat, " +()$"), pos)
 			if not match then
 				---@type AVMatchError
@@ -878,7 +880,7 @@ function AVCmds.array(tbl)
 	return {
 		usage=tbl.usage or "array",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			local array_pos = pos
 			local array_end = #raw
 			if not tbl.loose then
@@ -904,7 +906,7 @@ function AVCmds.array(tbl)
 				iter = iter + 1
 				if iter > 20 then error("while loop ran too long.") end
 				local matcher = tbl[(#values % #tbl) + 1]
-				local result = matcher:match(raw, array_pos, pattern_seperator)
+				local result = matcher:match(ctx, raw, array_pos, pattern_seperator)
 				table.insert(results, result)
 				if result.err then
 					break
@@ -978,7 +980,7 @@ function AVCmds.table(tbl)
 	return {
 		usage=tbl.usage or "table",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			value_matcher = value_matcher or AVCmds.value{__table_matcher=self}
 			local match = raw:match(braces_pat, pos)
 			if match == nil then
@@ -1004,12 +1006,12 @@ function AVCmds.table(tbl)
 				if raw:sub(mpos, mpos) == ")" then
 					break
 				end
-				local key_match = key_matcher:match(raw, mpos, " *= *")
+				local key_match = key_matcher:match(ctx, raw, mpos, " *= *")
 				if not key_match.err then
 					mpos = key_match.finish
 					mpos = raw:match("^ *()", mpos) or mpos
 				end
-				local value_match = value_matcher:match(raw, mpos, " *[" .. escape_pattern(seperator) .. escape_pattern(close) .. "]")
+				local value_match = value_matcher:match(ctx, raw, mpos, " *[" .. escape_pattern(seperator) .. escape_pattern(close) .. "]")
 				if value_match.err then
 					return value_match
 				end
@@ -1053,9 +1055,9 @@ function AVCmds.table_key(tbl)
 	return {
 		usage=tbl.usage or "table key",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			if tbl.strict ~= true then
-				local result = simple_matcher:match(raw, pos, cut)
+				local result = simple_matcher:match(ctx, raw, pos, cut)
 				if not result.err then
 					return result
 				end
@@ -1077,7 +1079,7 @@ function AVCmds.table_key(tbl)
 				}
 			end
 			local inner_pos = raw:match("^ *()", pos+#open)
-			local result = value_matcher:match(raw, inner_pos, " *"..escape_pattern(close))
+			local result = value_matcher:match(ctx, raw, inner_pos, " *"..escape_pattern(close))
 			if result.err then
 				---@type AVMatchError
 				return {
@@ -1101,7 +1103,7 @@ function AVCmds.index(tbl)
 	return {
 		usage=tbl.usage or "lua index",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			---@type AVIndexMatchValue
 			local path = {}
 			local raw_parts = {}
@@ -1115,7 +1117,7 @@ function AVCmds.index(tbl)
 
 				local value
 				if char == "[" then
-					local result = table_key_matcher:match(raw, ipos, "[.[ ]")
+					local result = table_key_matcher:match(ctx, raw, ipos, "[.[ ]")
 					if result.err then
 						break
 					end
@@ -1186,8 +1188,8 @@ function AVCmds.value(tbl)
 	return {
 		usage=tbl.usage or "lua value",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
-			local match = value_matcher:match(raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
+			local match = value_matcher:match(ctx, raw, pos, cut)
 			if not match.err then
 				return match
 			end
@@ -1227,8 +1229,8 @@ function AVCmds.player(tbl)
 	return {
 		usage=tbl.usage or "player",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
-			local result = matcher:match(raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
+			local result = matcher:match(ctx, raw, pos, cut)
 			if result.err then
 				result.err = AVCmds.MATCH_ERRORS.BAD_PLAYER
 				return result
@@ -1254,34 +1256,132 @@ function AVCmds.player(tbl)
 	}
 end
 
----@param tbl {cut_pat:string?,help:string?,usage:string?}?
+--- Coordinate matcher returns a table of 3 values, as look direction (`^`) can affect any axis.
+---@param tbl {axis:"x"|"y"|"z",cut_pat:string?,help:string?,usage:string?}
+---@return AVMatcher
+function AVCmds.coordinate(tbl)
+	AVCmds.assert(tbl.axis, "AVCmds.coordinate `axis` is required but missing.")
+	local axis_i = (tbl.axis == "x" and 1) or (tbl.axis == "y" and 2) or 3
+	local pattern_prefix = "^([~^]?)()"
+	local number_matcher = AVCmds.number{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
+	---@type AVMatcher
+	return {
+		usage=tbl.usage or "coordinate",
+		help=tbl.help,
+		match=function(self, ctx, raw, pos, cut)
+			local prefix_match, pos = raw:match(pattern_prefix, pos)
+			local n_match = number_matcher:match(ctx, raw, pos, " *[ ,] *")
+			local value, finish, cut_value
+			local used_carrot = false
+			if n_match.err then
+				if #prefix_match > 0 then
+					value = {0, 0, 0}
+					cut_value, finish = raw:match(AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
+					if cut_value == nil then
+						---@type AVMatchError
+						return {
+							matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_COORDINATE,
+							msg="Missing cut value.",
+						}
+					end
+				else
+					return n_match
+				end
+			else
+				value = {
+					tbl.axis == "x" and n_match.value or 0,
+					tbl.axis == "y" and n_match.value or 0,
+					tbl.axis == "z" and n_match.value or 0,
+				}
+				finish, cut_value = n_match.finish, n_match.cut
+			end
+			if prefix_match == "^" then
+				local dx, dy, dz, found = server.getPlayerLookDirection(ctx.player.id)
+				if not found then
+					---@type AVMatchError
+					return {
+						matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_COORDINATE,
+						msg=("Failed to get player look direction."),
+					}
+				end
+
+				local yaw = math.atan(dx, dz)
+				local pitch = math.asin(-dy)
+				local a, b, y = pitch, yaw, 0
+
+				local rot_m = {
+					math.cos(b)*math.cos(y), math.cos(b)*math.sin(y), -math.sin(b),
+					math.sin(a)*math.sin(b)*math.cos(y)-math.cos(a)*math.sin(y), math.sin(a)*math.sin(b)*math.sin(y)+math.cos(a)*math.cos(y), math.sin(a)*math.cos(b),
+					math.cos(a)*math.sin(b)*math.cos(y)+math.sin(a)*math.sin(y), math.cos(a)*math.sin(b)*math.sin(y)-math.sin(a)*math.cos(y), math.cos(a)*math.cos(b)
+				}
+
+				value = {
+					(rot_m[1]*value[1]) + (rot_m[4]*value[2]) + (rot_m[7]*value[3]),
+					(rot_m[2]*value[1]) + (rot_m[5]*value[2]) + (rot_m[8]*value[3]),
+					(-rot_m[3]*value[1]) + (rot_m[6]*value[2]) + (rot_m[9]*value[3])
+				}
+
+				used_carrot = true
+			end
+			-- All prefixes set from player position
+			if #prefix_match > 0 then
+				local player_matrix, found = server.getPlayerPos(ctx.player.id)
+				if not found then
+					---@type AVMatchError
+					return {
+						matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_COORDINATE,
+						msg=("Failed to get player position."),
+					}
+				end
+				value[axis_i] = value[axis_i] + player_matrix[13+axis_i-1]
+			end
+			---@type AVMatchValue
+			return {matcher=self, start=pos, finish=finish, raw=raw, cut=cut_value, value=value, used_carrot=used_carrot}
+		end,
+	}
+end
+
+---@param tbl {carrot_offset:{[1]:number,[2]:number,[3]:number}?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.position(tbl)
 	tbl = tbl or {}
-	local matcher_player = AVCmds.player{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
-	local matcher_number = AVCmds.number{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
+	tbl.carrot_offset = tbl.carrot_offset or {0,0.5,0}
+	local player_matcher = AVCmds.player{cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
+	local x_matcher = AVCmds.coordinate{axis="x", cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
+	local y_matcher = AVCmds.coordinate{axis="y", cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
+	local z_matcher = AVCmds.coordinate{axis="z", cut_pat=tbl.cut_pat,help=tbl.help,usage=tbl.usage}
 	---@type AVMatcher
 	return {
 		usage=tbl.usage or "position",
 		help=tbl.help,
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			---@type {[1]:number,[2]:number,[3]:number}
 			local position
 			---@type AVMatchValue
 			local result
 
 			if position == nil then
-				local result_x = matcher_number:match(raw, pos, " *[ ,] *")
-				local result_y = not result_x.err and matcher_number:match(raw, result_x.finish, " *[ ,] *")
-				local result_z = result_y and not result_y.err and matcher_number:match(raw, result_y.finish, cut)
+				local result_x = x_matcher:match(ctx, raw, pos, " *[ ,] *")
+				local result_y = not result_x.err and y_matcher:match(ctx, raw, result_x.finish, " *[ ,] *")
+				local result_z = result_y and not result_y.err and z_matcher:match(ctx, raw, result_y.finish, cut)
 				if result_x.value and result_y and result_y.value and result_z and result_z.value then
 					result = result_z
-					position = {result_x.value, result_y.value, result_z.value}
+					position = {
+						result_x.value[1] + result_y.value[1] + result_z.value[1],
+						result_x.value[2] + result_y.value[2] + result_z.value[2],
+						result_x.value[3] + result_y.value[3] + result_z.value[3],
+					}
+					---@diagnostic disable-next-line: undefined-field
+					if result_x.used_carrot or result_y.used_carrot or result_z.used_carrot then
+						position[1] = position[1] + tbl.carrot_offset[1]
+						position[2] = position[2] + tbl.carrot_offset[2]
+						position[3] = position[3] + tbl.carrot_offset[3]
+					end
 				end
 			end
 			-- Ensure that it's not gonna be a peer_id, but do allow steam id's (17 digits)
 			if position == nil and (not raw:match("^%d", pos) or raw:match("^%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d%d", pos)) then
-				local _result = matcher_player:match(raw, pos, cut)
+				local _result = player_matcher:match(ctx, raw, pos, cut)
 				if not _result.err then
 					local m = server.getPlayerPos(_result.value.id)
 					---@cast _result -AVMatchError
@@ -1315,8 +1415,8 @@ function AVCmds.optional(matcher, default)
 	return {
 		usage=matcher.usage,
 		help=matcher.help,
-		match=function(self, raw, pos, cut)
-			local result = matcher:match(raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
+			local result = matcher:match(ctx, raw, pos, cut)
 			if result.err then
 				---@type AVMatchValue
 				return {matcher=self, start=pos, finish=pos, raw=raw, cut="", value=default()}
@@ -1344,12 +1444,12 @@ function AVCmds.or_(tbl)
 	return {
 		usage=tbl.usage or ("(%s)"):format(table.concat(usage_parts, "|")),
 		help=tbl.help or table.concat(help_parts, "\n\n"),
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			local msgs = {}
 			local errs = {}
 			local err_pos = pos
 			for _, matcher in ipairs(tbl) do
-				local result = matcher:match(raw, pos, cut)
+				local result = matcher:match(ctx, raw, pos, cut)
 				if not result.err then
 					return result
 				end
@@ -1395,14 +1495,14 @@ function AVCmds.and_(tbl)
 	return {
 		usage=tbl.usage or ("(" .. ("%s"):format(table.concat(usage_parts, " ")) .. ")"),
 		help=tbl.help or table.concat(help_parts, "\n\n"),
-		match=function(self, raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
 			---@type AVMatcherResult[]
 			local results = {}
 			local values = {}
 			local mpos = pos
 			for _, matcher in ipairs(tbl) do
 				if type(matcher) ~= "number" then
-					local result = matcher:match(raw, raw:match("^ *()", mpos), cut)
+					local result = matcher:match(ctx, raw, raw:match("^ *()", mpos), cut)
 					if result.err then
 						return result
 					end
@@ -1442,16 +1542,16 @@ function AVCmds.if_(tbl)
 	return {
 		usage=tbl.usage or ("(" .. ("%s"):format(table.concat(usage_parts, " ")) .. ")"),
 		help=tbl.help or table.concat(help_parts, "\n\n"),
-		match=function(self, raw, pos, cut)
-			local cond_result = tbl[1]:match(raw, pos, cut)
+		match=function(self, ctx, raw, pos, cut)
+			local cond_result = tbl[1]:match(ctx, raw, pos, cut)
 			if cond_result.err then
 				if tbl[3] then
-					return tbl[3]:match(raw, pos, cut)
+					return tbl[3]:match(ctx, raw, pos, cut)
 				end
 				---@type AVMatchValue
 				return {matcher=self, start=pos, finish=pos, raw=raw, cut="", value=nil}
 			end
-			return tbl[2]:match(raw, raw:match("^ *()", cond_result.finish), cut)
+			return tbl[2]:match(ctx, raw, raw:match("^ *()", cond_result.finish), cut)
 		end,
 	}
 end

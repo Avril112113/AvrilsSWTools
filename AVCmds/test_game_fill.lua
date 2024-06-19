@@ -41,7 +41,6 @@ function server.getAddonData(index)
 	}
 end
 
----@return SWMatrix
 function server.getPlayerPos(peerID)
 	math.randomseed(9253986135, peerID)
 	return {
@@ -50,7 +49,19 @@ function server.getPlayerPos(peerID)
 		0, 0, 0, 0,
 		0, 0, 0, 0,
 		math.random(-10000, 10000), math.random(-10000, 10000), math.random(-10000, 10000), 0
-	}
+	}, true
+end
+
+server.__test_look_dir = {0, 0, 1}
+function server.getPlayerLookDirection(peerID)
+	-- math.randomseed(819356136, peerID)
+	-- local x, y, z = math.random(-10000, 10000), math.random(-10000, 10000), math.random(-10000, 10000)
+	-- local len = math.sqrt(x*x + y*y + z*z)
+	-- x = x/len
+	-- y = y/len
+	-- z = z/len
+	-- return x, y, z, true
+	return server.__test_look_dir[1], server.__test_look_dir[2], server.__test_look_dir[3], true
 end
 
 --- @param name string The display name of the user sending the message

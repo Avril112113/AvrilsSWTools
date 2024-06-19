@@ -263,9 +263,15 @@ end)
 
 TEST.addTest("matchers-position", function()
 	---@param m SWMatrix
+	---@param ox number?
+	---@param oy number?
+	---@param oz number?
 	---@return {[1]:number,[2]:number,[3]:number}
-	local function mtp(m)
-		return {m[13], m[14], m[15]}
+	local function mtp(m, ox, oy, oz)
+		ox = type(ox) == "number" and ox or 0
+		oy = oy or 0
+		oz = oz or 0
+		return {m[13] + ox, m[14] + oy, m[15] + oz}
 	end
 
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
@@ -290,6 +296,34 @@ TEST.addTest("matchers-position", function()
 	TEST.check(Utils.cmd_expect({handled=true, args={{1,2,3}}}, AVCmds.onCustomCommand("?test 1  2  3", 0)))
 
 	TEST.check(Utils.cmd_expect({handled=true, err=MATCH_ERRORS.BAD_POSITION}, AVCmds.onCustomCommand("?test 1,2,", 0)))
+
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(0), 0, 0, 0)}}, AVCmds.onCustomCommand("?test ~0 ~0 ~0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(0), 0, 0, 0)}}, AVCmds.onCustomCommand("?test ~ ~ ~", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(0), 1, 0, 0)}}, AVCmds.onCustomCommand("?test ~1 ~0 ~0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(0), 0, 1, 0)}}, AVCmds.onCustomCommand("?test ~0 ~1 ~0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(server.getPlayerPos(0), 0, 0, 1)}}, AVCmds.onCustomCommand("?test ~0 ~0 ~1", 0)))
+
+	local player_matrix = server.getPlayerPos(0)
+
+	-- local look_dir = {server.getPlayerLookDirection(0)}
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0, 0.5, 0)}}, AVCmds.onCustomCommand("?test ^0 ^0 ^0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0, 0.5, 0)}}, AVCmds.onCustomCommand("?test ^ ^ ^", 0)))
+	server.__test_look_dir = {0, 0, 1}
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 1.0, 0.5, 0.0)}}, AVCmds.onCustomCommand("?test ^1 ^0 ^0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0.0, 1.5, 0.0)}}, AVCmds.onCustomCommand("?test ^0 ^1 ^0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0.0, 0.5, 1.0)}}, AVCmds.onCustomCommand("?test ^0 ^0 ^1", 0)))
+	server.__test_look_dir = {1, 0, 0}
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0.0, 0.5, 1.0)}}, AVCmds.onCustomCommand("?test ^1 ^0 ^0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0.0, 1.5, 0.0)}}, AVCmds.onCustomCommand("?test ^0 ^1 ^0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 1.0, 0.5, 0.0)}}, AVCmds.onCustomCommand("?test ^0 ^0 ^1", 0)))
+	server.__test_look_dir = {-1, 0, 0}
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0.0, 0.5, -1.0)}}, AVCmds.onCustomCommand("?test ^1 ^0 ^0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0.0, 1.5, 0.0)}}, AVCmds.onCustomCommand("?test ^0 ^1 ^0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, -1.0, 0.5, 0.0)}}, AVCmds.onCustomCommand("?test ^0 ^0 ^1", 0)))
+	server.__test_look_dir = {0, 1, 0}
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 1.0, 0.5, 0.0)}}, AVCmds.onCustomCommand("?test ^1 ^0 ^0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0.0, 0.5, -1.0)}}, AVCmds.onCustomCommand("?test ^0 ^1 ^0", 0)))
+	TEST.check(Utils.cmd_expect({handled=true, args={mtp(player_matrix, 0.0, 1.5, 0.0)}}, AVCmds.onCustomCommand("?test ^0 ^0 ^1", 0)))
 end)
 
 TEST.addTest("matchers-optional", function()

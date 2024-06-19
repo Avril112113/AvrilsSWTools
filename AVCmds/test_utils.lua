@@ -107,7 +107,7 @@ function Utils.cmd_expect(expect, handled, ctx)
 		end
 	end
 	if expect.args ~= nil then
-		local ok, msg = TEST.eqDeep(ctx.args, expect.args, false)
+		local ok, msg = TEST.eqDeep(ctx.args, expect.args, false, 0.0000000001)
 		if not ok then
 			---@cast msg -?
 			return cmd_str, false, msg
