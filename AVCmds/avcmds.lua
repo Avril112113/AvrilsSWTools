@@ -628,6 +628,30 @@ function AVCmds.const(tbl)
 	}
 end
 
+---@param tbl {cut_pat:string?,help:string?,usage:string?}?
+---@return AVMatcher
+function AVCmds.nil_(tbl)
+	tbl = tbl or {}
+	local pattern = "^(nil)"
+	---@type AVMatcher
+	return {
+		usage=tbl.usage or "nil",
+		help=tbl.help,
+		match=function(self, ctx, raw, pos, cut)
+			local match, cut_value, finish = raw:match(pattern .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
+			if match then
+				---@type AVMatchValue
+				return {matcher=self, start=pos, finish=finish, raw=match, cut=cut_value, value=nil}
+			end
+			---@type AVMatchError
+			return {
+				matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_CONST,
+				msg=("Failed to match constant '%s'"):format(tbl[1]),
+			}
+		end,
+	}
+end
+
 --- - `min` - min string length
 --- - `max` - max string length
 --- - `strict` - If `true`, only allow quoted strings.
@@ -1179,6 +1203,7 @@ end
 function AVCmds.value(tbl)
 	tbl = tbl or {}
 	local value_matcher = AVCmds.or_{
+		AVCmds.nil_{cut_pat=tbl.cut_pat},
 		AVCmds.string{cut_pat=tbl.cut_pat, strict=true},
 		AVCmds.boolean{cut_pat=tbl.cut_pat, strict=true},
 		AVCmds.number{cut_pat=tbl.cut_pat, allow_inf=true, allow_nan=true},
@@ -1193,7 +1218,6 @@ function AVCmds.value(tbl)
 			if not match.err then
 				return match
 			end
-			print(match.msg)
 			---@type AVMatchError
 			return {
 				matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_LUA_VALUE,
