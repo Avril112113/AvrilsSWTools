@@ -1410,9 +1410,9 @@ function AVCmds.position(tbl)
 				if result_x.value and result_y and result_y.value and result_z and result_z.value then
 					result = result_z
 					position = {
-						result_x.prefix and (result_x.value[1] + result_y.value[1] + result_z.value[1]) or result_x.value[1],
-						result_y.prefix and (result_x.value[2] + result_y.value[2] + result_z.value[2]) or result_y.value[2],
-						result_z.prefix and (result_x.value[3] + result_y.value[3] + result_z.value[3]) or result_z.value[3],
+						result_x.prefix == "^" and (result_x.value[1] + result_y.value[1] + result_z.value[1]) or result_x.value[1],
+						result_y.prefix == "^" and (result_x.value[2] + result_y.value[2] + result_z.value[2]) or result_y.value[2],
+						result_z.prefix == "^" and (result_x.value[3] + result_y.value[3] + result_z.value[3]) or result_z.value[3],
 					}
 					if tbl.carrot_offset and (result_x.prefix == "^" or result_y.prefix == "^" or result_z.prefix == "^") then
 						local carrot_pos = tbl.carrot_offset(ctx)
