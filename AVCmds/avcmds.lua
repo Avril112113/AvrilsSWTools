@@ -505,7 +505,7 @@ function AVCmds.createCommand(tbl)
 						goto continue
 					end
 					---@type AVMatchError?
-					local result = handle(ctx, table.unpack(ctx.args))
+					local result = handle(ctx, table.unpack(ctx.args, 1, #ctx.argsData))
 					if type(result) == "table" then
 						AVCmds.assert(type(result.err) == "string" and type(result.msg) == "string" and type(result.pos) == "number", "Invalid handler error.")
 						ctx.err = result
