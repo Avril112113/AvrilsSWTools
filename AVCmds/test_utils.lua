@@ -4,7 +4,7 @@ local TEST
 local Utils = {}
 
 
----@param TEST_ TestEnv
+---@param TEST_ AvTest.TestEnv
 function Utils.setup(TEST_)
 	TEST = TEST_
 

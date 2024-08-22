@@ -6,11 +6,11 @@ local colors = {}
 ---@param s string
 ---@return string
 function colors.strip(s)
-	return (s:gsub("\x1b[%[%]][%d;]*m", ""))
+	return (s:gsub("\27[%[%]][%d;]*m", ""))
 end
 
-colors.CSI = "\x1b["
-colors.OSC = "\x1b]"
+colors.CSI = "\27["
+colors.OSC = "\27]"
 
 colors.reset = colors.CSI .. "0m"
 colors.bold = colors.CSI .. "1m"
@@ -58,6 +58,8 @@ colors.warn = colors.CSI .. "38;5;208m"
 colors.info = colors.CSI .. "38;5;27m"
 colors.debug = colors.CSI .. "38;5;119m"
 colors.fix = colors.CSI .. "38;5;244m"
+
+-- 
 
 
 return colors
