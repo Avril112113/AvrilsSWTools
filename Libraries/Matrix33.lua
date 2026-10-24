@@ -155,6 +155,32 @@ Matrix33 = {
 	end,
 	---@endsection
 
+	---@section Matrix33_add
+	---@param self Matrix33
+	---@return Matrix33
+	---@nodiscard
+	Matrix33_add = function(self, other)
+		local matrix = {}
+		for i=1,9 do
+			matrix[i] = self[i] + other[i]
+		end
+		return Matrix33:new(matrix)
+	end,
+	---@endsection
+
+	---@section Matrix33_sub
+	---@param self Matrix33
+	---@return Matrix33
+	---@nodiscard
+	Matrix33_sub = function(self, other)
+		local matrix = {}
+		for i=1,9 do
+			matrix[i] = self[i] + other[i]
+		end
+		return Matrix33:new(matrix)
+	end,
+	---@endsection
+
 	---@section Matrix33_transpose
 	---@return Matrix33
 	---@nodiscard
@@ -163,6 +189,40 @@ Matrix33 = {
 			self[1], self[4], self[7],
 			self[2], self[5], self[8],
 			self[3], self[6], self[9]
+		})
+	end,
+	---@endsection
+
+	---@section Matrix33_invert
+	---@param self Matrix33
+	---@return Matrix33
+	---@nodiscard
+	Matrix33_invert = function(self)
+		local
+			a, b, c,
+			d, e, f,
+			g, h, i =
+				self:M(1, 1), self:M(1, 2), self:M(1, 3),
+				self:M(2, 1), self:M(2, 2), self:M(2, 3),
+				self:M(3, 1), self:M(3, 2), self:M(3, 3)
+
+		local A, B, C, D, E, F, G, H, I =
+			e * i - f * h,
+			-(d * i - f * g),
+			d * h - e * g,
+			-(b * i - c * h),
+			a * i - c * g,
+			-(a * h - b * g),
+			b * f - c * e,
+			-(a * f - c * d),
+			a * e - b * d
+
+		local inv_det = 1 / (a * A + b * B + c * C)
+
+		return Matrix33:new({
+			A * inv_det, D * inv_det, G * inv_det,
+			B * inv_det, E * inv_det, H * inv_det,
+			C * inv_det, F * inv_det, I * inv_det
 		})
 	end,
 	---@endsection
