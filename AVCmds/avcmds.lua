@@ -1,5 +1,5 @@
 --- Avrils Commands Library
---- Version: 0.3.3
+--- Version: 0.4.0
 
 --[[
 	Terminology:
@@ -121,6 +121,7 @@ AVCmds.MATCH_ERRORS = {
 	BAD_NUMBER_INTEGER="BAD_NUMBER_INTEGER",
 	BAD_WILDCARD="BAD_WILDCARD",  -- Only happens when no input or custom cut_pat failed.
 	BAD_WILDCARD_LEN="BAD_WILDCARD_LEN",
+	BAD_FLAG="BAD_FLAG",
 	BAD_ARRAY="BAD_ARRAY",
 	BAD_ARRAY_COUNT="BAD_ARRAY_COUNT",
 	BAD_TABLE="BAD_TABLE",
@@ -224,6 +225,36 @@ function AVCmds.response(tbl)
 	server.announce(tbl.name or ADDON_NAME, table.concat(tbl, " ", 2), tbl.peer_id or ctx.player.id)
 end
 
+--- Produces a range of caret's '^' prefixed with spaces required to point at `start` position in the `raw` string.
+---@param raw string
+---@param from integer  # Usually just `1`
+---@param start integer
+---@param finish integer?
+function AVCmds.getCaretRangePointerStr(raw, from, start, finish)
+	finish = finish or start
+	local spaces = (AVCmds.getTextWidth(raw:sub(from, start)) - AVCmds.TEXT_WIDTH_DATA["^"]) / AVCmds.TEXT_WIDTH_DATA[" "]
+	local caret_count = math.max(1, math.ceil(AVCmds.getTextWidth(raw:sub(start, finish)) / AVCmds.TEXT_WIDTH_DATA["^"]))
+	return string.rep(" ", math.ceil(spaces - 0.1)) .. string.rep("^", caret_count)
+end
+
+--- Similar to getCaretRangePointerStr, but produces multiple carets instead of a range.
+--- Overlapping carets are not displayed.
+---@param raw string
+---@param from integer  # Usually just `1`
+---@param ... integer  # Expected to be sorted!
+function AVCmds.getCaretMultiplePointersStr(raw, from, ...)
+	local parts = {}
+	for i, to in ipairs({...}) do
+		if i == 1 or from ~= to then
+			local spaces = (AVCmds.getTextWidth(raw:sub(from, to)) - AVCmds.TEXT_WIDTH_DATA["^"]) / AVCmds.TEXT_WIDTH_DATA[" "]
+			table.insert(parts, string.rep(" ", math.ceil(spaces - 0.1)))
+			table.insert(parts, "^")
+			from = to + 1
+		end
+	end
+	return table.concat(parts)
+end
+
 --- This can be overridden for custom errors.
 ---@param ctx AVCommandContext # Furthest handled context of which all of it's command children handlers failed to match.
 ---@return string
@@ -286,14 +317,12 @@ function AVCmds.formatContextErr(ctx)
 	-- If there is only 1 error, show that error in full.
 	if #err_ctxs == 1 then
 		local child_ctx = err_ctxs[1]
-		local spaces = (AVCmds.getTextWidth(ctx.raw:sub(1, child_ctx.err.pos)) - AVCmds.TEXT_WIDTH_DATA["^"]) / AVCmds.TEXT_WIDTH_DATA[" "]
-		return ("%s\n%s\n%s"):format(child_ctx.err.msg, child_ctx.raw, string.rep(" ", math.ceil(spaces - 0.1)) .. "^")
+		return ("%s\n%s\n%s"):format(child_ctx.err.msg, child_ctx.raw, AVCmds.getCaretRangePointerStr(ctx.raw, 1, child_ctx.err.pos))
 	end
 	if #options <= 0 then
 		return "Unknown error processing command."
 	end
-	local spaces = (AVCmds.getTextWidth(ctx.raw:sub(1, pos)) - AVCmds.TEXT_WIDTH_DATA["^"]) / AVCmds.TEXT_WIDTH_DATA[" "]
-	return ("Expected %s\n%s\n%s"):format(concat_english(options, ", ", " or "), ctx.raw, string.rep(" ", math.ceil(spaces - 0.1)) .. "^")
+	return ("Expected %s\n%s\n%s"):format(concat_english(options, ", ", " or "), ctx.raw, AVCmds.getCaretRangePointerStr(ctx.raw, 1, pos))
 end
 
 --- If this returns true, the command was handled.
@@ -628,30 +657,6 @@ function AVCmds.const(tbl)
 	}
 end
 
----@param tbl {cut_pat:string?,help:string?,usage:string?}?
----@return AVMatcher
-function AVCmds.nil_(tbl)
-	tbl = tbl or {}
-	local pattern = "^(nil)"
-	---@type AVMatcher
-	return {
-		usage=tbl.usage or "nil",
-		help=tbl.help,
-		match=function(self, ctx, raw, pos, cut)
-			local match, cut_value, finish = raw:match(pattern .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
-			if match then
-				---@type AVMatchValue
-				return {matcher=self, start=pos, finish=finish, raw=match, cut=cut_value, value=nil}
-			end
-			---@type AVMatchError
-			return {
-				matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_CONST,
-				msg=("Failed to match constant '%s'"):format(tbl[1]),
-			}
-		end,
-	}
-end
-
 --- - `min` - min string length
 --- - `max` - max string length
 --- - `strict` - If `true`, only allow quoted strings.
@@ -685,7 +690,7 @@ function AVCmds.string(tbl)
 				end
 			elseif tbl.strict ~= true then
 				match, cut_value, finish = raw:match(PATTERN_SIMPLE .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos)
-				if match == nil then
+				if match == nil or #match <= 0 then
 					msg = "Failed to match string."
 				else
 					value = match
@@ -875,6 +880,57 @@ function AVCmds.wildcard(tbl)
 	}
 end
 
+--- WARN: This is only the first iteration of this matcher, it will likely change!
+---       This also doesn't set named ctx args yet.
+--- - [1] the flag, eg "f" or "flag"
+---@param tbl {[1]:string,cut_pat:string?,help:string?,usage:string?}
+---@return AVMatcher
+function AVCmds.flag(tbl)
+	AVCmds.assert(type(tbl[1]) == "string", "AVCmds.flag `[1]` should be a string.")
+	if tbl[3] == nil then tbl[3] = false end
+	local pattern = "^(%-%-" .. escape_pattern(tbl[1]) .. ")"
+	local matcher = AVCmds.boolean{}
+	---@type AVMatcher
+	return {
+		usage=tbl.usage or ("--" .. tbl[1]),
+		help=tbl.help,
+		match=function(self, ctx, raw, pos, cut)
+			local match = raw:match(pattern, pos)
+			if match then
+				local value = true
+				local flag_pos = pos + #match
+				if raw:sub(flag_pos, flag_pos) == "=" then
+					flag_pos = flag_pos + 1
+					match = match .. "="
+
+					local result = matcher:match(ctx, raw, flag_pos, "()()")
+					if result.err then
+						return result
+					end
+					---@cast result AVMatchValue
+					flag_pos = result.finish
+					match = match .. result.raw
+					value = result.value
+				end
+
+				local cut_value, finish = raw:match("^" .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), flag_pos)
+				if cut_value == nil then
+					---@type AVMatchError
+					return {
+						matcher=self, pos=flag_pos, err=AVCmds.MATCH_ERRORS.BAD_FLAG,
+						msg="Missing cut value.",
+					}
+				end
+
+				---@type AVMatchValue
+				return {matcher=self, start=pos, finish=finish, raw=match, cut=cut_value, value=value}
+			end
+			---@type AVMatchValue
+			return {matcher=self, start=pos, finish=pos, raw=match, cut="", value=false}
+		end,
+	}
+end
+
 --- #### NOTE for space separator:  
 --- . When not hard limiting the amount of elements with `n`  
 --- . some element matchers will cause subsequent arguments to not be matched.  
@@ -887,17 +943,17 @@ end
 --- - `loose` do not check for braces.  
 --- - `separator` the separator character to use, space separator is supported, default ",". 
 --- - `braces` string of 2 characters for opening and closing of a array, default "[]".  
----@param tbl {[integer]:AVMatcher,[integer]:AVMatcher,n:integer?,min:integer?,max:integer?,strict:boolean?,loose:boolean?,seperator:string?,braces:string?,cut_pat:string?,help:string?,usage:string?}
+---@param tbl {[integer]:AVMatcher,[integer]:AVMatcher,n:integer?,min:integer?,max:integer?,strict:boolean?,loose:boolean?,separator:string?,braces:string?,cut_pat:string?,help:string?,usage:string?}
 ---@return AVMatcher
 function AVCmds.array(tbl)
 	AVCmds.assert(not (tbl.strict and tbl.loose), "AVCmds.array `strict` is not compatible with `loose`.")
-	AVCmds.assert(tbl.seperator == nil or #tbl.seperator == 1, "AVCmds.array `seperator` should be 1 charecter.")
+	AVCmds.assert(tbl.separator == nil or #tbl.separator == 1, "AVCmds.array `separator` should be 1 character.")
 	AVCmds.assert(tbl.braces == nil or #tbl.braces == 2, "AVCmds.array `braces` should be of length 2.")
 	AVCmds.assert((tbl.n == nil and tbl.min == nil and tbl.max == nil) or (tbl.n ~= nil and tbl.min == nil and tbl.max == nil) or (tbl.n == nil and (tbl.min ~= nil or tbl.max ~= nil)), "AVCmds.array `n` is not compatible with `min` and `max`")
 	AVCmds.assert(tbl[1], "AVCmds.array requires at least 1 matcher.")
-	local seperator = tbl.seperator or ","
-	local pattern_seperator = " *[" .. escape_pattern(seperator) .. "%] ] *"
-	local pattern_seperator_cap = " *([" .. escape_pattern(seperator) .. "%] ]) *"
+	local separator = tbl.separator or ","
+	local pattern_separator = " *[" .. escape_pattern(separator) .. "%] ] *"
+	local pattern_separator_cap = " *([" .. escape_pattern(separator) .. "%] ]) *"
 	local braces = tbl.braces or "[]"
 	local pattern_braces = "^%b" .. braces
 	---@type AVMatcher
@@ -930,17 +986,16 @@ function AVCmds.array(tbl)
 				iter = iter + 1
 				if iter > 20 then error("while loop ran too long.") end
 				local matcher = tbl[(#values % #tbl) + 1]
-				local result = matcher:match(ctx, raw, array_pos, pattern_seperator)
+				local result = matcher:match(ctx, raw, array_pos, pattern_separator)
 				table.insert(results, result)
 				if result.err then
 					break
 				end
 				table.insert(values, result.value)
 				array_pos = result.finish
-				local value_cut = result.cut:match(pattern_seperator_cap .. "$")
-				if value_cut ~= seperator then
+				local value_cut = result.cut:match(pattern_separator_cap .. "$")
+				if value_cut ~= separator then
 					if value_cut == "]" or value_cut == " " then
-						array_pos = array_pos - #seperator
 						break
 					end
 					---@type AVMatchError
@@ -966,8 +1021,8 @@ function AVCmds.array(tbl)
 					msg=("Not enough array values, expected count %s."):format(AVCmds._bounds_err_msg(tbl.min, tbl.max)),
 				}
 			end
-			array_pos = raw:match("%]?()", array_pos - (seperator == " " and 1 or 0))
-			local cut_value, finish = raw:match(AVCmds._check_cut(cut, tbl.cut_pat, " ()"), array_pos)
+			array_pos = array_pos - 1
+			local cut_value, finish = raw:match("^" .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), array_pos)
 			if cut_value == nil then
 				---@type AVMatchError
 				return {
@@ -986,14 +1041,14 @@ end
 --- - `key` matcher to use for keys. (defaults to AVCmds.table_key)  
 --- - `value` matcher to use for values. (defaults to AVCmds.value)  
 --- - `braces` string of 2 characters for opening and closing of a table, default "()".
----@param tbl {key:AVMatcher?,value:AVMatcher?,seperator:string?,braces:string?,cut_pat:string?,help:string?,usage:string?}?
+---@param tbl {key:AVMatcher?,value:AVMatcher?,separator:string?,braces:string?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.table(tbl)
 	tbl = tbl or {}
 	AVCmds.assert(tbl.braces == nil or #tbl.braces == 2, "AVCmds.table `braces` should be of length 2.")
 	AVCmds.assert(tbl.key == nil, "AVCmds.table key matchers are not supported yet.")
 	AVCmds.assert(tbl.value == nil, "AVCmds.table value matchers are not supported yet.")
-	local seperator = tbl.seperator or ","
+	local separator = tbl.separator or ","
 	local braces = tbl.braces or "()"
 	local open = braces:sub(1, 1)
 	local close = braces:sub(2, 2)
@@ -1014,7 +1069,7 @@ function AVCmds.table(tbl)
 					msg=("Missing table brace pair '%s%s'."):format(open, close),
 				}
 			end
-			local cut_value, finish = raw:match(AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos+#match)
+			local cut_value, finish = raw:match("^" .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos+#match)
 			if cut_value == nil then
 				---@type AVMatchError
 				return {
@@ -1035,7 +1090,7 @@ function AVCmds.table(tbl)
 					mpos = key_match.finish
 					mpos = raw:match("^ *()", mpos) or mpos
 				end
-				local value_match = value_matcher:match(ctx, raw, mpos, " *[" .. escape_pattern(seperator) .. escape_pattern(close) .. "]")
+				local value_match = value_matcher:match(ctx, raw, mpos, " *[" .. escape_pattern(separator) .. escape_pattern(close) .. "]")
 				if value_match.err then
 					return value_match
 				end
@@ -1094,7 +1149,7 @@ function AVCmds.table_key(tbl)
 					msg=("Missing table_key brace pair '%s%s'."):format(open, close),
 				}
 			end
-			local cut_value, finish = raw:match(AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos+#match)
+			local cut_value, finish = raw:match("^" .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), pos+#match)
 			if cut_value == nil then
 				---@type AVMatchError
 				return {
@@ -1176,7 +1231,7 @@ function AVCmds.index(tbl)
 			if raw:sub(ipos-1, ipos-1) == " " then
 				ipos = ipos - 1
 			end
-			local cut_value, finish = raw:match(AVCmds._check_cut(cut, tbl.cut_pat, " ()"), ipos)
+			local cut_value, finish = raw:match("^" .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), ipos)
 			if cut_value == nil then
 				---@type AVMatchError
 				return {
@@ -1203,7 +1258,7 @@ end
 function AVCmds.value(tbl)
 	tbl = tbl or {}
 	local value_matcher = AVCmds.or_{
-		AVCmds.nil_{cut_pat=tbl.cut_pat},
+		AVCmds.const{"nil", cut_pat=tbl.cut_pat},
 		AVCmds.string{cut_pat=tbl.cut_pat, strict=true},
 		AVCmds.boolean{cut_pat=tbl.cut_pat, strict=true},
 		AVCmds.number{cut_pat=tbl.cut_pat, allow_inf=true, allow_nan=true},
@@ -1223,23 +1278,6 @@ function AVCmds.value(tbl)
 				matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_LUA_VALUE,
 				msg="Invalid lua value.",
 			}
-		end,
-	}
-end
-
---- - [1] the flag, eg "f" or "flag"
---- - [2] value matcher, required for `--flag=value`, default boolean.
---- - [3] default value, default `false`, required when using value matcher.
----@param tbl {[1]:string,[2]:AVMatcher,[3]:any,cut_pat:string?,help:string?,usage:string?}
----@return AVMatcher
-function AVCmds.flag(tbl)
-	error("TODO")
-	---@type AVMatcher
-	return {
-		usage=tbl.usage or "--flag",
-		help=tbl.help,
-		match=function(self, raw, pos, cut)
-			error("TODO")
 		end,
 	}
 end
@@ -1629,7 +1667,11 @@ local function str_value(value)
 				end
 			end
 		end
-		return table.concat(parts, ""):sub(1, -2) .. "}"
+		local parts_str = table.concat(parts, "")
+		if parts_str:sub(-1) == "," then
+			parts_str = parts_str:sub(1, -2)
+		end
+		return parts_str .. "}"
 	elseif type(value) == "string" then
 		local q = "'" and value:find("\"") or  "\""
 		return ("%s%s%s"):format(q, value, q)

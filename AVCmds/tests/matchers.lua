@@ -167,6 +167,34 @@ TEST.addTest("matchers-wildcard", function()
 	TEST.check(Utils.cmd_expect({handled=true,args={"foo bar baz", "yupee, it cut!"}}, AVCmds.onCustomCommand("?test foo bar baz; yupee, it cut!", 0)))
 end)
 
+TEST.addTest("matchers-flag", function ()
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.flag{"foo"},
+			gen_default_handler("arg test flag")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test --foo", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test --foo=false", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test --foo=true", 0)))
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.array{AVCmds.flag{"foo"}},
+			gen_default_handler("arg test flag")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={{}}}, AVCmds.onCustomCommand("?test", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{true}}}, AVCmds.onCustomCommand("?test --foo", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{false}}}, AVCmds.onCustomCommand("?test --foo=false", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{true}}}, AVCmds.onCustomCommand("?test --foo=true", 0)))
+end)
+
 TEST.addTest("matchers-array", function()
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 	AVCmds.createCommand {name="test"}
@@ -176,6 +204,8 @@ TEST.addTest("matchers-array", function()
 			gen_default_handler("arg test array")
 		}
 
+	TEST.check(Utils.cmd_expect({handled=true,args={{}}}, AVCmds.onCustomCommand("?test", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=MATCH_ERRORS.EXCESS_INPUT}, AVCmds.onCustomCommand("?test ]", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={{"a", "b", "c"}}}, AVCmds.onCustomCommand("?test a,b,c", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={{"a", "b", "c"}}}, AVCmds.onCustomCommand("?test [a,b,c]", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={{"a", "b", "c"}}}, AVCmds.onCustomCommand("?test a, b, c", 0)))
@@ -200,7 +230,7 @@ TEST.addTest("matchers-array", function()
 	AVCmds.createCommand {name="test"}
 		:registerGlobalCommand()
 		:addHandler {
-			AVCmds.array{AVCmds.string(),seperator=" "},
+			AVCmds.array{AVCmds.string(),separator=" "},
 			gen_default_handler("arg test array")
 		}
 
@@ -217,7 +247,7 @@ TEST.addTest("matchers-array", function()
 		:registerGlobalCommand()
 		:addHandler {
 			AVCmds.string(),
-			AVCmds.array{AVCmds.number(),min=1,seperator=" "},
+			AVCmds.array{AVCmds.number(),min=1,separator=" "},
 			AVCmds.string(),
 			---@param ctx AVCommandContext
 			function(ctx, ...)
@@ -400,7 +430,7 @@ TEST.addTest("matchers-table", function()
 	TEST.check(Utils.cmd_expect({handled=true,args={{{'depth..'}}}}, AVCmds.onCustomCommand("?test (('depth..'))", 0)))
 	-- TODO: Don't use balanced `%b` pattern for tables, because the below cases fail.
 	TEST.check(Utils.cmd_expect({handled=true,args={{1, 'close in string )', 2}}}, AVCmds.onCustomCommand("?test (1, 'close in string )', 2)", 0)))
-	TEST.check(Utils.cmd_expect({handled=true,args={{1, 'open in string (', 2}}}, AVCmds.onCustomCommand("?test (1, 'close in string (', 2)", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={{1, 'open in string (', 2}}}, AVCmds.onCustomCommand("?test (1, 'open in string (', 2)", 0)))
 end)
 
 TEST.addTest("matchers-table_key", function()

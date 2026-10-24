@@ -37,7 +37,11 @@ function Utils.str_value(value)
 				end
 			end
 		end
-		return table.concat(parts, ""):sub(1, -2) .. "}"
+		local parts_str = table.concat(parts, "")
+		if parts_str:sub(-1) == "," then
+			parts_str = parts_str:sub(1, -2)
+		end
+		return parts_str .. "}"
 	elseif type(value) == "string" then
 		local q = "'" and value:find("\"") or  "\""
 		return ("%s%s%s"):format(q, value, q)
