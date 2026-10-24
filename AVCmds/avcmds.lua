@@ -9,10 +9,10 @@
 		A 'handler function' is the last value provided to `some_cmd:addHandler`
 		A 'sub-command' is a command from `AVCmds.createCommand` that is used as a handler function.
 
-	There are numerous methods that can be overriden, these will all be above AVCmds.onCustomCommand in this file.
+	There are numerous methods that can be overridden, these will all be above AVCmds.onCustomCommand in this file.
 	However, all of these do have "works out of the box" defaults.
 	
-	If you want to create custom matchers, use `AVCmds.player` as an example, as that is likley the closest to your use case.
+	If you want to create custom matchers, use `AVCmds.player` as an example, as that is likely the closest to your use case.
 	`AVCmds.player` uses another existing matcher, so it should be simple to adjust to your own needs.
 	For errors, `BAD_PLAYER` can be any reasonable unique string.
 
@@ -875,7 +875,7 @@ function AVCmds.wildcard(tbl)
 	}
 end
 
---- #### NOTE for space seperator:  
+--- #### NOTE for space separator:  
 --- . When not hard limiting the amount of elements with `n`  
 --- . some element matchers will cause subsequent arguments to not be matched.  
 --- . For example, a non-strict string matcher will consume nearly anything, and so the subsequent argument to the command will 'not exist'.  
@@ -883,10 +883,10 @@ end
 --- - `n` match exactly this elements.  
 --- - `min` at least this many elements.  
 --- - `max` at most this many elements.  
---- - `strict` force use of braces arround array.  
+--- - `strict` force use of braces around array.  
 --- - `loose` do not check for braces.  
---- - `seperator` the seperator charecter to use, space seperator is supported, default ",". 
---- - `braces` string of 2 charecters for opening and closing of a array, default "[]".  
+--- - `separator` the separator character to use, space separator is supported, default ",". 
+--- - `braces` string of 2 characters for opening and closing of a array, default "[]".  
 ---@param tbl {[integer]:AVMatcher,[integer]:AVMatcher,n:integer?,min:integer?,max:integer?,strict:boolean?,loose:boolean?,seperator:string?,braces:string?,cut_pat:string?,help:string?,usage:string?}
 ---@return AVMatcher
 function AVCmds.array(tbl)
@@ -982,10 +982,10 @@ function AVCmds.array(tbl)
 end
 
 --- If key and value matchers are omitted, defaults to parsing a lua table format.  
---- NOTE: `{` and `}` are invalid charecters to type in chat.  
+--- NOTE: `{` and `}` are invalid characters to type in chat.  
 --- - `key` matcher to use for keys. (defaults to AVCmds.table_key)  
 --- - `value` matcher to use for values. (defaults to AVCmds.value)  
---- - `braces` string of 2 charecters for opening and closing of a table, default "()".
+--- - `braces` string of 2 characters for opening and closing of a table, default "()".
 ---@param tbl {key:AVMatcher?,value:AVMatcher?,seperator:string?,braces:string?,cut_pat:string?,help:string?,usage:string?}?
 ---@return AVMatcher
 function AVCmds.table(tbl)
@@ -1057,7 +1057,7 @@ function AVCmds.table(tbl)
 	}
 end
 
---- - `braces` - string of 2 charecters for opening and closing of a table key, default "[]"
+--- - `braces` - string of 2 characters for opening and closing of a table key, default "[]"
 --- - `strict` - disables simple string as a key
 --- A handy matcher for table keys.  
 --- Matches a simple string or a AVCmds.value wrapped in square braces.  

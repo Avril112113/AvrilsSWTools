@@ -119,4 +119,4 @@ AVCmds.createCommand {name="savedata"}
 ```
 
 
-To run the tests, ensure lua 5.3+ is installed and run `lua test/test.lua tests/cmds.lua`.  
+To run the tests, ensure lua 5.3+ is installed and run `lua test/test.lua tests`.  
