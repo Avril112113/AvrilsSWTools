@@ -1,5 +1,5 @@
 --- Avrils Commands Library
---- Version: 0.4.0
+--- Version: 0.4.1
 
 --[[
 	Terminology:
@@ -56,7 +56,7 @@
 ---@field match fun(self, ctx:AVCommandContext, raw:string, pos:integer, cut:string?):AVMatcherResult
 
 ---@class AVCommandContext
----@field handler AVCommandHandlerTbl?  # The corosponding handler from command.
+---@field handler AVCommandHandlerTbl?  # The corresponding handler from command.
 ---@field command AVCommand # The command this context is from
 ---@field parent AVCommandContext?  # Parent context, if there is one.
 ---@field children table<AVCommandHandlerTbl|AVCommand,AVCommandContext>  # Children context's, empty for called handler context.
@@ -80,7 +80,7 @@
 
 ---@alias AVCommandHandlerFun fun(ctx:AVCommandContext, ...):AVMatchError?  # Returned error does not need matcher field, but all other are required.
 ---@class AVCommandHandlerTbl
----@field [integer] AVMatcher|AVCommand|AVCommandHandlerFun
+---@field [integer] AVMatcher|(AVCommand|AVCommandHandlerFun) # All values are a AVMatcher except the last, which is AVCommand or AVCommandHandlerFun.
 ---@field [string] AVMatcher|AVCommand
 
 ---@alias AVCommandPreHandlerFun fun(ctx:AVCommandContext):AVMatchError|true?  # Returned error does not need matcher field, but all other are required.
@@ -394,11 +394,11 @@ function AVCmds.createCommand(tbl)
 	---@type AVCommandHandlerFun[]
 	command._pre_handlers = {}
 	---@type table<AVCommandHandlerFun,integer>
-	command._pre_handlers_indicies = {}  -- A look up to get pre handler index from pre handler
+	command._pre_handlers_indices = {}  -- A look up to get pre handler index from pre handler
 	---@type (AVCommandHandlerTbl|AVCommand)[]
 	command._handlers = {}
 	---@type table<AVCommandHandlerTbl|AVCommand,integer>
-	command._handlers_indicies = {}  -- A look up to get handler index from handler
+	command._handlers_indices = {}  -- A look up to get handler index from handler
 
 	---@param name string
 	function command:setName(name)
@@ -428,15 +428,15 @@ function AVCmds.createCommand(tbl)
 		}
 		return self
 	end
-	--- WARN: A pre-handler might be called when a futher match fails, ensure to be careful what you do in a pre-handler (happens with sub-commands, using a command in a handler)  
+	--- WARN: A pre-handler might be called when a further match fails, ensure to be careful what you do in a pre-handler (happens with sub-commands, using a command in a handler)  
 	--- Pre-handlers are called before a normal handler, they are intended to modify the context and add additional validation.  
 	--- Helpful in reducing duplicate code for handlers and sub-commands.  
-	--- Pre-handlers can return `true` to skip the original handler and any deeper pre-handlers, acting as if it were sucsessfully handled.  
+	--- Pre-handlers can return `true` to skip the original handler and any deeper pre-handlers, acting as if it were successfully handled.  
 	---@param pre_handler AVCommandPreHandlerFun
 	function command:addPreHandler(pre_handler)
 		AVCmds.assert(type(pre_handler) == "function", "Invalid pre handler, was not a function.")
 		table.insert(self._pre_handlers, pre_handler)
-		self._pre_handlers_indicies[pre_handler] = #self._pre_handlers
+		self._pre_handlers_indices[pre_handler] = #self._pre_handlers
 		return self
 	end
 	--- Add the default usage handler.
@@ -459,7 +459,7 @@ function AVCmds.createCommand(tbl)
 		if handler.__name == "AVCommand" then
 			---@cast handler AVCommand
 			table.insert(self._handlers, handler)
-			self._handlers_indicies[handler] = #self._handlers
+			self._handlers_indices[handler] = #self._handlers
 		else
 			---@cast handler AVCommandHandlerTbl
 			local handle = handler[#handler]
@@ -468,7 +468,7 @@ function AVCmds.createCommand(tbl)
 				"Invalid handler, last value in table was not of AVCommand or function."
 			)
 			table.insert(self._handlers, handler)
-			self._handlers_indicies[handler] = #self._handlers
+			self._handlers_indices[handler] = #self._handlers
 		end
 		return self
 	end
@@ -580,8 +580,6 @@ function AVCmds.createCommand(tbl)
 		end
 		if tbl.handlers then
 			for _, handler in ipairs(tbl.handlers) do
-				-- Typing system is a bit lost after the ipairs :/
-				---@cast handler AVCommand|AVCommandHandlerTbl
 				command:addHandler(handler)
 			end
 		end
@@ -880,8 +878,6 @@ function AVCmds.wildcard(tbl)
 	}
 end
 
---- WARN: This is only the first iteration of this matcher, it will likely change!
----       This also doesn't set named ctx args yet.
 --- - [1] the flag, eg "f" or "flag"
 ---@param tbl {[1]:string,cut_pat:string?,help:string?,usage:string?}
 ---@return AVMatcher
@@ -935,7 +931,7 @@ end
 --- . When not hard limiting the amount of elements with `n`  
 --- . some element matchers will cause subsequent arguments to not be matched.  
 --- . For example, a non-strict string matcher will consume nearly anything, and so the subsequent argument to the command will 'not exist'.  
---- [integer] repeating pattern of elements.  
+--- - `[integer]` repeating pattern of elements.  
 --- - `n` match exactly this elements.  
 --- - `min` at least this many elements.  
 --- - `max` at most this many elements.  
@@ -956,9 +952,15 @@ function AVCmds.array(tbl)
 	local pattern_separator_cap = " *([" .. escape_pattern(separator) .. "%] ]) *"
 	local braces = tbl.braces or "[]"
 	local pattern_braces = "^%b" .. braces
+
+	local usages = {}
+	for _, matcher in ipairs(tbl) do
+		table.insert(usages, matcher.usage)
+	end
+
 	---@type AVMatcher
 	return {
-		usage=tbl.usage or "array",
+		usage=tbl.usage or ("(%s%s...)"):format(table.concat(usages, " | "), separator),
 		help=tbl.help,
 		match=function(self, ctx, raw, pos, cut)
 			local array_pos = pos
@@ -977,7 +979,7 @@ function AVCmds.array(tbl)
 				end
 			end
 
-			---@type (AVMatchError|AVMatchValue)[]
+			---@type AVMatcherResult[]
 			local results = {}
 			---@type any[]
 			local values = {}
@@ -1502,7 +1504,7 @@ function AVCmds.optional(matcher, default)
 	end
 	---@type AVMatcher
 	return {
-		usage=matcher.usage,
+		usage=("[%s]"):format(matcher.usage),
 		help=matcher.help,
 		match=function(self, ctx, raw, pos, cut)
 			local result = matcher:match(ctx, raw, pos, cut)
@@ -1531,7 +1533,7 @@ function AVCmds.or_(tbl)
 	end
 	---@type AVMatcher
 	return {
-		usage=tbl.usage or ("(%s)"):format(table.concat(usage_parts, "|")),
+		usage=tbl.usage or ("(%s)"):format(table.concat(usage_parts, " | ")),
 		help=tbl.help or table.concat(help_parts, "\n\n"),
 		match=function(self, ctx, raw, pos, cut)
 			local msgs = {}
@@ -1694,7 +1696,7 @@ function AVCmds.toparts_context_path(ctx, parts)
 		table.insert(parts, ctx.command.name)
 	end
 	if ctx.handler then
-		table.insert(parts, ("[%.0f]"):format(ctx.command._handlers_indicies[ctx.handler]))
+		table.insert(parts, ("[%.0f]"):format(ctx.command._handlers_indices[ctx.handler]))
 	end
 	return parts
 end
@@ -1726,7 +1728,7 @@ function AVCmds.toparts_context_tree(ctx, lines, depth)
 	end
 	table.insert(line, ("%s:%s:%s"):format(ctx.command.name, ctx.pos, ctx.finish))
 	if ctx.handler then
-		table.insert(line, ("[%s]"):format(ctx.command._handlers_indicies[ctx.handler]))
+		table.insert(line, ("[%s]"):format(ctx.command._handlers_indices[ctx.handler]))
 	end
 	if ctx.args and #ctx.args > 0 then
 		-- TODO: Handle non-positionals
