@@ -1,5 +1,5 @@
 --- Avrils Commands Library
---- Version: 0.4.1
+--- Version: 0.5.0
 
 --[[
 	Terminology:
@@ -51,9 +51,10 @@
 ---@alias AVMatcherResult AVMatchValue|AVMatchError
 
 ---@class AVMatcher
----@field usage string # type name for this matcher, used for usage info, this can be anything.
----@field help string? # Argument help info.
----@field match fun(self, ctx:AVCommandContext, raw:string, pos:integer, cut:string?):AVMatcherResult
+---@field usage string  # type name for this matcher, used for usage info, this can be anything.
+---@field help string?  # Argument help info.
+---@field recurrent boolean?  # Default: false. If this matcher should checked again despite a prior successful :match() result.
+---@field match fun(self, ctx:AVCommandContext, raw:string, pos:integer, cut:string|nil?, recurrent:AVMatcherResult|nil?):AVMatcherResult
 
 ---@class AVCommandContext
 ---@field handler AVCommandHandlerTbl?  # The corresponding handler from command.
@@ -65,7 +66,7 @@
 ---@field pos integer  # Position in the input this context starts.
 ---@field finish integer  # Position in the input this context finishes.
 ---@field player SWPlayer  # The player that run the command (peer_id of `0` for server)
----@field argsData table<number|string, AVMatchValue|AVMatchError>  # The full info about all arguments.
+---@field argsData table<number|string, AVMatchValue|AVMatchError>  # The full info about all arguments. Non-positionals are included but may be misleading as they can be checked multiple times.
 ---@field args table<number|string,any>  # Quick access to argument values, primarily used for flags.
 ---@field err AVMatchError?  # Error for this context.
 
@@ -112,6 +113,7 @@ AVCmds._SERVER_PLAYER = {
 ---@enum AVMatchErrorCode
 AVCmds.MATCH_ERRORS = {
 	EXCESS_INPUT="EXCESS_INPUT",
+	MISSING_NON_POSITIONAL="MISSING_NON_POSITIONAL",
 	BAD_CONST="BAD_CONST",  -- When a constant fails to match.
 	BAD_STRING="BAD_STRING",
 	BAD_STRING_LEN="BAD_STRING_LEN",
@@ -454,6 +456,7 @@ function AVCmds.createCommand(tbl)
 	end
 	--- Handlers are checked in reverse order than they are added.
 	--- Meaning, the last added handler is the first to be checked.
+	--- Non-positionals are only checked after a positional fails. The order is also non-deterministic, so ensure no non-positionals can conflict!
 	---@param handler AVCommandHandlerTbl|AVCommand
 	function command:addHandler(handler)
 		if handler.__name == "AVCommand" then
@@ -462,33 +465,68 @@ function AVCmds.createCommand(tbl)
 			self._handlers_indices[handler] = #self._handlers
 		else
 			---@cast handler AVCommandHandlerTbl
-			local handle = handler[#handler]
-			AVCmds.assert(
-				type(handle) == "function" or (type(handle) == "table" and handle.__name == "AVCommand"),
-				"Invalid handler, last value in table was not of AVCommand or function."
-			)
+			for key, value in pairs(handler) do
+				if key == #handler then
+					AVCmds.assert(
+						type(value) == "function" or (type(value) == "table" and value.__name == "AVCommand"),
+						"Invalid handler, last value in table was not of AVCommand or function."
+					)
+				else
+					AVCmds.assert(
+						type(value) == "table" and type(value.match) == "function",
+						"Invalid handler, all values except last in table was not of AVMatcher."
+					)
+				end
+			end
 			table.insert(self._handlers, handler)
 			self._handlers_indices[handler] = #self._handlers
 		end
 		return self
 	end
+	---@return string
+	function command:getUsage()
+		local usage_parts = {}
+		for handler_index=#self._handlers,1,-1 do
+			local handler = self._handlers[handler_index]
+			if handler.__name == "AVCommand" then
+				---@cast handler AVCommand
+				table.insert(usage_parts, handler:getUsage())
+			else
+				---@cast handler AVCommandHandlerTbl
+				-- Check all non-positional arguments
+				for i, matcher in pairs(handler) do
+					if type(i) ~= "number" then
+						---@cast matcher AVMatcher  # We know it's not the handler function/sub-command, as that's only the last array value.
+						table.insert(usage_parts, matcher.usage)
+					end
+				end
+				-- Check all positional arguments
+				for i=1,#handler-1 do
+					local matcher = handler[i]
+					---@cast matcher AVMatcher  # We know it's not the handler function/sub-command, as that's only the last value.
+					table.insert(usage_parts, matcher.usage)
+				end
+			end
+		end
+		return table.concat(usage_parts, " ")
+	end
 	--- Handle a command
 	---@param parent_ctx AVCommandContext
 	---@param raw string
 	---@param pos integer
-	---@return boolean, AVCommandContext?
+	---@return boolean, AVCommandContext
 	function command:_handle(parent_ctx, raw, pos)
 		for handler_index=#self._handlers,1,-1 do
 			local handler = self._handlers[handler_index]
 			if handler.__name == "AVCommand" then
 				---@cast handler AVCommand
 				-- TODO: Test this
-				local hanled, ctx = handler:_handle(parent_ctx, raw, pos)
+				local handled, ctx = handler:_handle(parent_ctx, raw, pos)
 				-- FIXME: There is no ctx to be set if there is an error.
 				parent_ctx.children[handler] = ctx
 				parent_ctx.children_order[handler_index] = handler
-				if hanled then
-					return hanled, ctx
+				if handled then
+					return handled, ctx
 				end
 			else
 				local pos_parse = pos
@@ -496,23 +534,88 @@ function AVCmds.createCommand(tbl)
 				local ctx = self:_create_context({handler=handler, pos=pos_parse}, parent_ctx)
 				parent_ctx.children[handler] = ctx
 				parent_ctx.children_order[handler_index] = handler
-				-- Check all positional arguments
+
+				local non_positional_ids = {}
 				for i, _ in pairs(handler) do
-					AVCmds.assert(type(i) == "number", "non-positionals are not yet supported.")
+					if type(i) ~= "number" then
+						table.insert(non_positional_ids, i)
+					end
 				end
-				for i=1,#handler-1 do
-					local match = handler[i]:match(ctx, raw, pos_parse)
+				---@return boolean  # If any non-positionals were parsed.
+				local function parse_non_positionals()
+					local start_pos = pos_parse
+					local found_match = true
+					while found_match do
+						found_match = false
+						for _, i in ipairs(non_positional_ids) do
+							local matcher = handler[i]
+							---@cast matcher AVMatcher  # We know it's not the handler function/sub-command, as that's only the last array value.
+							-- Ensure non-positional is only parsed successfully once.
+							if matcher.recurrent or not ctx.argsData[i] or ctx.argsData[i].err then
+								local match = matcher:match(ctx, raw, pos_parse, nil, ctx.argsData[i])
+
+								ctx.argsData[i] = match
+								if match.err == nil then
+									-- The `math.max` is needed, as recurrent matchers can return an old match.
+									local real_finish = math.max(match.finish, pos_parse)
+									found_match = real_finish ~= pos_parse
+
+									---@cast match AVMatchValue
+									ctx.args[i] = match.value
+									pos_parse = raw:match("^ *()", math.max(real_finish, pos_parse))  -- Ensure all spaces are consumed
+									ctx.finish = pos_parse
+								end
+							end
+						end
+					end
+					return start_pos ~= pos_parse
+				end
+
+				-- Check all positional arguments
+				---@param i integer
+				---@param try_non_positionals boolean
+				---@return boolean  # If the parse failed
+				local function parse_positional(i, try_non_positionals)
+					local matcher = handler[i]
+					---@cast matcher AVMatcher  # We know it's not the handler function/sub-command, as that's only the last value.
+					local match = matcher:match(ctx, raw, pos_parse)
 					ctx.argsData[i] = match
 					if match.err ~= nil then
-						---@cast match AVMatchError
-						ctx.err = match
-						goto continue
+						if try_non_positionals and parse_non_positionals() then
+							return parse_positional(i, false)
+						else
+							---@cast match AVMatchError
+							ctx.err = match
+							return false
+						end
 					end
 					---@cast match AVMatchValue
 					ctx.args[i] = match.value
 					pos_parse = raw:match("^ *()", match.finish)  -- Ensure all spaces are consumed
 					ctx.finish = pos_parse
+
+					return true
 				end
+				for i=1,#handler-1 do
+					if not parse_positional(i, true) then
+						goto continue
+					end
+				end
+
+				-- In case there are no positionals, or all positionals parsed without fail, ensure the non-positionals are parsed.
+				parse_non_positionals()
+
+				-- Ensure all non-positionals are successful.
+				for _, i in ipairs(non_positional_ids) do
+					local result = ctx.argsData[i]
+					if result.err then
+						---@cast result AVMatchError
+						ctx.err = result
+						goto continue
+					end
+				end
+
+				-- Pre handlers
 				for _, pre_handler in ipairs(self._pre_handlers) do
 					local result = pre_handler(ctx)
 					if type(result) == "table" then
@@ -523,6 +626,8 @@ function AVCmds.createCommand(tbl)
 						return true, ctx
 					end
 				end
+
+				-- Main handler, as we've succeeded!
 				local handle = handler[#handler]
 				if type(handle) == "function" then
 					-- Check that all input has been consumed before running the handler function.
@@ -1506,11 +1611,18 @@ function AVCmds.optional(matcher, default)
 	return {
 		usage=("[%s]"):format(matcher.usage),
 		help=matcher.help,
-		match=function(self, ctx, raw, pos, cut)
+		recurrent=true,
+		match=function(self, ctx, raw, pos, cut, recurrent)
+			---@cast recurrent +{optional_err:AVMatchError}
+			if recurrent and not recurrent.err and not recurrent.optional_err then
+				return recurrent
+			end
+
 			local result = matcher:match(ctx, raw, pos, cut)
 			if result.err then
-				---@type AVMatchValue
-				return {matcher=self, start=pos, finish=pos, raw=raw, cut="", value=default()}
+				---@cast result AVMatchError
+				---@type AVMatchValue|{optional_err:AVMatchError}
+				return {matcher=self, start=pos, finish=pos, raw=raw, cut="", value=default(), optional_err=result}
 			end
 			return result
 		end,
@@ -1731,10 +1843,18 @@ function AVCmds.toparts_context_tree(ctx, lines, depth)
 		table.insert(line, ("[%s]"):format(ctx.command._handlers_indices[ctx.handler]))
 	end
 	if ctx.args and #ctx.args > 0 then
-		-- TODO: Handle non-positionals
 		local args = {}
 		for _, arg in ipairs(ctx.args) do
 			table.insert(args, str_value(arg))
+		end
+		for i, arg in pairs(ctx.args) do
+			if type(i) ~= "number" then
+				if type(i) == "string" then
+					table.insert(args, ("%s=%s"):format(i, str_value(arg)))
+				else
+					table.insert(args, ("[%s]=%s"):format(str_value(i), str_value(arg)))
+				end
+			end
 		end
 		table.insert(line, ("(%s)"):format(table.concat(args, ", ")))
 	end

@@ -69,12 +69,12 @@ function Utils.cmd_expect(expect, handled, ctx)
 	end
 	if expect.err ~= nil then
 		if ctx.err then
-			-- If not any error, check for spesific error.
+			-- If not any error, check for specific error.
 			if expect.err ~= true and expect.err ~= ctx.err.err then
 				return cmd_str, false, ("Expected '%s' but got '%s': %s"):format(expect.err, ctx.err.err, ctx.err.msg)
 			end
 		else
-			-- Check all children for any or spesific error.
+			-- Check all children for any or specific error.
 			for handler, child_ctx in pairs(ctx.children) do
 				if child_ctx.err then
 					if expect.err == true then

@@ -74,6 +74,47 @@ TEST.addTest("basic", function()
 	TEST.check(Utils.cmd_expect({handled=true,err="SCARY_123"}, AVCmds.onCustomCommand("?test 123", 0)))
 end)
 
+TEST.addTest("non-positionals", function ()
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			potato=AVCmds.const{"potato"},
+			AVCmds.const{"foo"},
+			gen_default_handler("arg test non-positional")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={"foo", potato="potato"}}, AVCmds.onCustomCommand("?test foo potato", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={"foo", potato="potato"}}, AVCmds.onCustomCommand("?test potato foo", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=AVCmds.MATCH_ERRORS.BAD_CONST}, AVCmds.onCustomCommand("?test foo", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=AVCmds.MATCH_ERRORS.EXCESS_INPUT}, AVCmds.onCustomCommand("?test foo potato potato", 0)))
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			potato=AVCmds.const{"potato"},
+			AVCmds.const{"potato"},
+			gen_default_handler("arg test non-positional /w positional conflict")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={"potato", potato="potato"}}, AVCmds.onCustomCommand("?test potato potato", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=AVCmds.MATCH_ERRORS.BAD_CONST}, AVCmds.onCustomCommand("?test potato", 0)))
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			potato=AVCmds.const{"potato"},
+			AVCmds.const{"potato"},
+			AVCmds.const{"potato"},
+			gen_default_handler("arg test non-positional /w positional conflict")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={"potato", "potato", potato="potato"}}, AVCmds.onCustomCommand("?test potato potato potato", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=AVCmds.MATCH_ERRORS.BAD_CONST}, AVCmds.onCustomCommand("?test potato potato", 0)))
+end)
+
 TEST.addTest("prehandlers", function()
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 	AVCmds.createCommand {name="test"}
@@ -145,7 +186,7 @@ TEST.addTest("prehandlers", function()
 		}
 
 	-- Note that the arguments are empty here, if it matched further it'd have errored with BAD_STRING.
-	-- It didn't match futher however, because of using a sub-command.
+	-- It didn't match further however, because of using a sub-command.
 	TEST.check(Utils.cmd_expect({handled=true,args={}}, AVCmds.onCustomCommand("?test", 0)))
 
 	--[[ To better describe what is happening here:
@@ -153,7 +194,30 @@ TEST.addTest("prehandlers", function()
 		however this only applies to the current command, and in this case the handler does indeed match as it requires no arguments.
 		So the handler is run, but before that the pre handler,
 		however the pre-handler returns `true` to skip the handler.
-		This results in the sub-command never being checked and it's required arguments being completley ignored, since it was told to be skipped.
+		This results in the sub-command never being checked and it's required arguments being completely ignored, since it was told to be skipped.
 		~ The detail here is, sub-commands are checked when the handler is run for them.
 	]]
+end)
+
+TEST.addTest("getUsage", function ()
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+
+	-- TODO: Might want to actually make this a test case?
+	--       Right now it's just to preview how the usage looks.
+	print(
+		AVCmds.createCommand {name="test"}
+			:registerGlobalCommand()
+			:addHandler {
+				potato=AVCmds.const{"potato"},
+				AVCmds.const{"potato"},
+				AVCmds.table(),
+				AVCmds.string(),
+				AVCmds.integer(),
+				AVCmds.optional(AVCmds.player()),
+				AVCmds.position(),
+				AVCmds.array{AVCmds.string()},
+				gen_default_handler("arg test string")
+			}
+			:getUsage()
+	)
 end)

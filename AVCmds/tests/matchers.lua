@@ -390,6 +390,20 @@ TEST.addTest("matchers-optional", function()
 	TEST.check(Utils.cmd_expect({handled=true,args={true, 1}}, AVCmds.onCustomCommand("?test true 1", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={false, 2}}, AVCmds.onCustomCommand("?test false 2", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={nil, 3}}, AVCmds.onCustomCommand("?test 3", 0)))
+
+	-- Test recurrent non-positional.
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			potato=AVCmds.optional(AVCmds.string{}),
+			AVCmds.const{"potato"},
+			AVCmds.const{"potato"},
+			gen_default_handler("arg test optional non-positional")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={"potato", "potato", potato=nil}}, AVCmds.onCustomCommand("?test potato potato", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={"potato", "potato", potato="foo"}}, AVCmds.onCustomCommand("?test potato potato foo", 0)))
 end)
 
 TEST.addTest("matchers-or", function()
