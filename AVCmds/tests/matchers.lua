@@ -172,27 +172,49 @@ TEST.addTest("matchers-flag", function ()
 	AVCmds.createCommand {name="test"}
 		:registerGlobalCommand()
 		:addHandler {
-			AVCmds.flag{"foo"},
+			AVCmds.flag{long="foo", short="f"},
 			gen_default_handler("arg test flag")
 		}
 
-	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test", 0)))
-	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test --foo", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={nil}}, AVCmds.onCustomCommand("?test --foo", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test --foo=false", 0)))
 	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test --foo=true", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={nil}}, AVCmds.onCustomCommand("?test -f", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test -f=false", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test -f=true", 0)))
 
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 	AVCmds.createCommand {name="test"}
 		:registerGlobalCommand()
 		:addHandler {
-			AVCmds.array{AVCmds.flag{"foo"}},
+			AVCmds.optional(AVCmds.flag{long="foo", default=true}, false),
 			gen_default_handler("arg test flag")
 		}
 
-	TEST.check(Utils.cmd_expect({handled=true,args={{}}}, AVCmds.onCustomCommand("?test", 0)))
-	TEST.check(Utils.cmd_expect({handled=true,args={{true}}}, AVCmds.onCustomCommand("?test --foo", 0)))
-	TEST.check(Utils.cmd_expect({handled=true,args={{false}}}, AVCmds.onCustomCommand("?test --foo=false", 0)))
-	TEST.check(Utils.cmd_expect({handled=true,args={{true}}}, AVCmds.onCustomCommand("?test --foo=true", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test --foo", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test", 0)))
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.flag{long="foo", force_assign=false, default=true},
+			gen_default_handler("arg test flag")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={true}}, AVCmds.onCustomCommand("?test --foo", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=AVCmds.MATCH_ERRORS.BAD_FLAG}, AVCmds.onCustomCommand("?test --foo=false", 0)))
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			AVCmds.flag{long="foo", force_assign=true},
+			gen_default_handler("arg test flag")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={false}}, AVCmds.onCustomCommand("?test --foo=false", 0)))
+	TEST.check(Utils.cmd_expect({handled=true,err=AVCmds.MATCH_ERRORS.BAD_FLAG}, AVCmds.onCustomCommand("?test --foo", 0)))
 end)
 
 TEST.addTest("matchers-array", function()

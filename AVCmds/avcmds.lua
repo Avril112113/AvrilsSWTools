@@ -1,5 +1,5 @@
 --- Avrils Commands Library
---- Version: 0.5.0
+--- Version: 0.6.0
 
 --[[
 	Terminology:
@@ -51,6 +51,7 @@
 ---@alias AVMatcherResult AVMatchValue|AVMatchError
 
 ---@class AVMatcher
+---@field __type string?  # Not all matchers has this field yet.
 ---@field usage string  # type name for this matcher, used for usage info, this can be anything.
 ---@field help string?  # Argument help info.
 ---@field recurrent boolean?  # Default: false. If this matcher should checked again despite a prior successful :match() result.
@@ -927,6 +928,7 @@ function AVCmds.boolean(tbl)
 	local pattern = "^(%w+)"
 	---@type AVMatcher
 	return {
+		__type="boolean",
 		usage=tbl.usage or "boolean",
 		help=tbl.help,
 		match=function(self, ctx, raw, pos, cut)
@@ -983,51 +985,106 @@ function AVCmds.wildcard(tbl)
 	}
 end
 
---- - [1] the flag, eg "f" or "flag"
----@param tbl {[1]:string,cut_pat:string?,help:string?,usage:string?}
+-- TODO: AVCmds.flagArray
+
+--- - `long` name, string or matcher to suffix `--`
+--- - `short` name, string or matcher to suffix `-`
+--- - `value` value matcher. Default: `AVCmds.boolean{}`
+--- - `default` default value, making `=` optional. Default: `nil`
+--- - `force_assign`, `true` makes `=` required, `false` makes it disallowed, `nil` makes it optional. Default: `nil`
+--- 
+--- Use `AVCmds.optional` if you want the flag to be optional.  
+--- Use `AVCmds.flagArray` if you want multiple the flag to be repeatable. (`flagArray` is an alias of `array` with different defaults)  
+--- 
+--- Special case; If `[1]` is `AVCmds.boolean` and `[2] == true`, the flag inverts the default value.
+---@param tbl {long:string|AVMatcher?,short:string|AVMatcher?,value:AVMatcher|nil?,default:any|nil?,force_assign:boolean|nil?,cut_pat:string?,help:string?,usage:string?}
 ---@return AVMatcher
 function AVCmds.flag(tbl)
-	AVCmds.assert(type(tbl[1]) == "string", "AVCmds.flag `[1]` should be a string.")
-	if tbl[3] == nil then tbl[3] = false end
-	local pattern = "^(%-%-" .. escape_pattern(tbl[1]) .. ")"
-	local matcher = AVCmds.boolean{}
+	---@diagnostic disable-next-line: assign-type-mismatch
+	local long_name_matcher = type(tbl.long) == "string" and AVCmds.const{tbl.long} or tbl.long
+	---@cast long_name_matcher -string
+	AVCmds.assert(long_name_matcher == nil or type(long_name_matcher) == "table", "AVCmds.flag `long` should be a string, AVMatcher or nil.")
+
+	---@diagnostic disable-next-line: assign-type-mismatch
+	local short_name_matcher = type(tbl.short) == "string" and AVCmds.const{tbl.short} or tbl.short
+	---@cast short_name_matcher -string
+	AVCmds.assert(short_name_matcher == nil or type(short_name_matcher) == "table", "AVCmds.flag `short` should be a string, AVMatcher or nil.")
+
+	AVCmds.assert(long_name_matcher ~= nil or short_name_matcher ~= nil, "AVCmds.flag one of `long` or `short` must be provided.")
+
+	local value_matcher = tbl.value or AVCmds.boolean{}
+	AVCmds.assert(type(value_matcher) == "table", "AVCmds.flag `value` should be nil or AVMatcher.")
+
 	---@type AVMatcher
 	return {
-		usage=tbl.usage or ("--" .. tbl[1]),
+		-- TODO: If `=` is required, add to usage.
+		usage=tbl.usage or ("%s%s%s"):format(
+			long_name_matcher and ("--" .. long_name_matcher.usage) or "",
+			long_name_matcher and short_name_matcher and "/" or "",
+			short_name_matcher and ("-" .. short_name_matcher.usage) or ""
+		),
 		help=tbl.help,
 		match=function(self, ctx, raw, pos, cut)
-			local match = raw:match(pattern, pos)
-			if match then
-				local value = true
-				local flag_pos = pos + #match
-				if raw:sub(flag_pos, flag_pos) == "=" then
-					flag_pos = flag_pos + 1
-					match = match .. "="
+			local flag_pos = pos
 
-					local result = matcher:match(ctx, raw, flag_pos, "()()")
-					if result.err then
-						return result
-					end
-					---@cast result AVMatchValue
-					flag_pos = result.finish
-					match = match .. result.raw
-					value = result.value
-				end
-
-				local cut_value, finish = raw:match("^" .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), flag_pos)
-				if cut_value == nil then
-					---@type AVMatchError
-					return {
-						matcher=self, pos=flag_pos, err=AVCmds.MATCH_ERRORS.BAD_FLAG,
-						msg="Missing cut value.",
-					}
-				end
-
-				---@type AVMatchValue
-				return {matcher=self, start=pos, finish=finish, raw=match, cut=cut_value, value=value}
+			---@type AVMatcher
+			local name_matcher
+			if long_name_matcher and raw:sub(pos, pos + 1) == "--" then
+				name_matcher = long_name_matcher
+				flag_pos = pos + 2
+			elseif short_name_matcher and raw:sub(pos, pos) == "-" then
+				name_matcher = short_name_matcher
+				flag_pos = pos + 1
+			else
+				---@type AVMatchError
+				return {
+					matcher=self, pos=pos, err=AVCmds.MATCH_ERRORS.BAD_FLAG,
+					msg=("Missing flag prefix %s"):format(("%s%s%s"):format(
+						long_name_matcher and "`--`" or "",
+						long_name_matcher and short_name_matcher and "/" or "",
+						short_name_matcher and "`-`" or ""
+					)),
+				}
 			end
-			---@type AVMatchValue
-			return {matcher=self, start=pos, finish=pos, raw=match, cut="", value=false}
+
+			local name_result = name_matcher:match(ctx, raw, flag_pos, "[= ]()")
+			if name_result.err then
+				return name_result
+			end
+			---@cast name_result -AVMatchError
+			flag_pos = name_result.finish - #name_result.cut
+
+			local value = tbl.default
+
+			local value_result
+			if tbl.force_assign ~= false and raw:sub(flag_pos, flag_pos) == "=" then
+				flag_pos = flag_pos + 1
+				value_result = value_matcher:match(ctx, raw, flag_pos)
+				if value_result.err then
+					return value_result
+				end
+				flag_pos = value_result.finish - #value_result.cut
+				value = value_result.value
+			elseif tbl.force_assign == true then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=flag_pos, err=AVCmds.MATCH_ERRORS.BAD_FLAG,
+					msg="Missing required flag value (missing `=`)",
+				}
+			end
+			---@cast value_result -AVMatchError
+
+			local cut_value, finish = raw:match("^" .. AVCmds._check_cut(cut, tbl.cut_pat, " ()"), flag_pos)
+			if cut_value == nil then
+				---@type AVMatchError
+				return {
+					matcher=self, pos=flag_pos, err=AVCmds.MATCH_ERRORS.BAD_FLAG,
+					msg="Missing cut value.",
+				}
+			end
+
+			---@type AVMatchValue|{name_result:AVMatchValue,value_result:AVMatchValue?}
+			return {matcher=self, start=pos, finish=finish, raw=raw, cut=cut_value, value=value, name_result=name_result, value_result=value_result}
 		end,
 	}
 end
@@ -1057,6 +1114,9 @@ function AVCmds.array(tbl)
 	local pattern_separator_cap = " *([" .. escape_pattern(separator) .. "%] ]) *"
 	local braces = tbl.braces or "[]"
 	local pattern_braces = "^%b" .. braces
+
+	-- TODO: Add `accumulate` option which enables `recurrent` and allows non-positionals to append to the array.
+	--       Main use case is with separator=" " and flags
 
 	local usages = {}
 	for _, matcher in ipairs(tbl) do

@@ -85,9 +85,10 @@ function Utils.cmd_expect(expect, handled, ctx)
 				end
 			end
 			do
-				return cmd_str, false, ("Expected %s error, but the error was not found.\n%s"):format(
+				return cmd_str, false, ("Expected %s error, but the error was not found.\n%s%s"):format(
 					expect.err ~= true and expect.err or "any",
-					table.concat(AVCmds.toparts_context_tree(ctx), "\n")
+					table.concat(AVCmds.toparts_context_tree(ctx), "\n"),
+					not ctx.err and "" or ("\n'%s': %s"):format(ctx.err.err, ctx.err.msg)
 				)
 			end
 			::err_found::
