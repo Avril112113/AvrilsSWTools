@@ -985,8 +985,6 @@ function AVCmds.wildcard(tbl)
 	}
 end
 
--- TODO: AVCmds.flagArray
-
 --- - `long` name, string or matcher to suffix `--`
 --- - `short` name, string or matcher to suffix `-`
 --- - `value` value matcher. Default: `AVCmds.boolean{}`
@@ -1089,19 +1087,31 @@ function AVCmds.flag(tbl)
 	}
 end
 
+--- Alias for AVCmds.array{ separator = " ", loose = true, accumulate = true }
+---@param tbl AVCmds.array_args
+function AVCmds.flagArray(tbl)
+	tbl.separator = tbl.separator or " "
+	if tbl.loose == nil then tbl.loose = true end
+	if tbl.accumulate == nil then tbl.accumulate = true end
+	return AVCmds.array(tbl)
+end
+
+---@alias AVCmds.array_args {[integer]:AVMatcher,[integer]:AVMatcher,n:integer?,min:integer?,max:integer?,strict:boolean?,loose:boolean?,separator:string?,braces:string?,accumulate:boolean?,cut_pat:string?,help:string?,usage:string?}
 --- #### NOTE for space separator:  
 --- . When not hard limiting the amount of elements with `n`  
 --- . some element matchers will cause subsequent arguments to not be matched.  
 --- . For example, a non-strict string matcher will consume nearly anything, and so the subsequent argument to the command will 'not exist'.  
+--- 
 --- - `[integer]` repeating pattern of elements.  
 --- - `n` match exactly this elements.  
 --- - `min` at least this many elements.  
 --- - `max` at most this many elements.  
 --- - `strict` force use of braces around array.  
 --- - `loose` do not check for braces.  
---- - `separator` the separator character to use, space separator is supported, default ",". 
---- - `braces` string of 2 characters for opening and closing of a array, default "[]".  
----@param tbl {[integer]:AVMatcher,[integer]:AVMatcher,n:integer?,min:integer?,max:integer?,strict:boolean?,loose:boolean?,separator:string?,braces:string?,cut_pat:string?,help:string?,usage:string?}
+--- - `separator` the separator character to use, space separator is supported. Default: ",". 
+--- - `braces` string of 2 characters for opening and closing of a array. Default: "[]".  
+--- - `accumulate` will accumulate values when used with non-positionals. Default: `false`.  
+---@param tbl AVCmds.array_args
 ---@return AVMatcher
 function AVCmds.array(tbl)
 	AVCmds.assert(not (tbl.strict and tbl.loose), "AVCmds.array `strict` is not compatible with `loose`.")
@@ -1109,14 +1119,12 @@ function AVCmds.array(tbl)
 	AVCmds.assert(tbl.braces == nil or #tbl.braces == 2, "AVCmds.array `braces` should be of length 2.")
 	AVCmds.assert((tbl.n == nil and tbl.min == nil and tbl.max == nil) or (tbl.n ~= nil and tbl.min == nil and tbl.max == nil) or (tbl.n == nil and (tbl.min ~= nil or tbl.max ~= nil)), "AVCmds.array `n` is not compatible with `min` and `max`")
 	AVCmds.assert(tbl[1], "AVCmds.array requires at least 1 matcher.")
+	AVCmds.assert(not tbl.accumulate or (tbl.n == nil and tbl.min == nil), "AVCmds.array accumulate is incompatible with `n` and `min`.")
 	local separator = tbl.separator or ","
 	local pattern_separator = " *[" .. escape_pattern(separator) .. "%] ] *"
 	local pattern_separator_cap = " *([" .. escape_pattern(separator) .. "%] ]) *"
 	local braces = tbl.braces or "[]"
 	local pattern_braces = "^%b" .. braces
-
-	-- TODO: Add `accumulate` option which enables `recurrent` and allows non-positionals to append to the array.
-	--       Main use case is with separator=" " and flags
 
 	local usages = {}
 	for _, matcher in ipairs(tbl) do
@@ -1127,7 +1135,8 @@ function AVCmds.array(tbl)
 	return {
 		usage=tbl.usage or ("(%s%s...)"):format(table.concat(usages, " | "), separator),
 		help=tbl.help,
-		match=function(self, ctx, raw, pos, cut)
+		recurrent=tbl.accumulate,
+		match=function(self, ctx, raw, pos, cut, recurrent)
 			local array_pos = pos
 			local array_end = #raw
 			if not tbl.loose then
@@ -1147,7 +1156,7 @@ function AVCmds.array(tbl)
 			---@type AVMatcherResult[]
 			local results = {}
 			---@type any[]
-			local values = {}
+			local values = recurrent and recurrent.value or {}
 			local iter = 0
 			while array_pos < array_end do
 				iter = iter + 1
@@ -1198,7 +1207,7 @@ function AVCmds.array(tbl)
 				}
 			end
 			---@type AVMatchValue
-			return {matcher=self, start=pos, finish=finish, raw=raw, cut=cut_value, value=values}
+			return {matcher=self, start=pos, finish=finish, raw=raw, cut=cut_value, value=values }
 		end,
 	}
 end

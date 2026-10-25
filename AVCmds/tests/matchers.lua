@@ -217,6 +217,22 @@ TEST.addTest("matchers-flag", function ()
 	TEST.check(Utils.cmd_expect({handled=true,err=AVCmds.MATCH_ERRORS.BAD_FLAG}, AVCmds.onCustomCommand("?test --foo", 0)))
 end)
 
+TEST.addTest("matchers-flagArray", function ()
+	-- `AVCmds.flagArray` is an alias for `AVCmds.array` with different defaults
+	-- This tests the `AVCmds.array{ accumulate=true }`
+
+	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
+	AVCmds.createCommand {name="test"}
+		:registerGlobalCommand()
+		:addHandler {
+			foos=AVCmds.flagArray{AVCmds.flag{long="foo", default=true}},
+			AVCmds.const{"bar"},
+			gen_default_handler("arg test flag")
+		}
+
+	TEST.check(Utils.cmd_expect({handled=true,args={"bar", foos={true, false, true}}}, AVCmds.onCustomCommand("?test --foo bar --foo=false --foo", 0)))
+end)
+
 TEST.addTest("matchers-array", function()
 	AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 	AVCmds.createCommand {name="test"}
