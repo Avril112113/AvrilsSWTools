@@ -1,6 +1,38 @@
 ---@meta # Shhh, less complaining LuaLS
 
 
+-- Typing from https://github.com/Cuh4/StormworksAddonLuaDocumentation/blob/main/docs/intellisense.lua
+
+---@class SWPlayer
+---@field id number The peer ID of the player (as seen in the server player list)
+---@field name string The name of the player
+---@field admin boolean Whether the player is an admin
+---@field auth boolean Whether the player has auth
+---@field steam_id number The player's Steam ID (convert to string as soon as possible to prevent loss of data)
+---@field object_id number The player's character's object ID. Note that this isnt in the in-game documentation for some reason
+
+---@class SWMatrix
+---@field [1] number
+---@field [2] number
+---@field [3] number
+---@field [4] number
+---@field [5] number
+---@field [6] number
+---@field [7] number
+---@field [8] number
+---@field [9] number
+---@field [10] number
+---@field [11] number
+---@field [12] number
+---@field [13] number x
+---@field [14] number y
+---@field [15] number z
+---@field [16] number
+
+debug.log = function(...)
+	print("[debug.log]", ...)
+end
+
 server = {}
 _G.server = server  -- Needed if we are in a test.
 
