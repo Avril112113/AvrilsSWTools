@@ -1835,18 +1835,18 @@ AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 
 -- Stuff for debugging.
 
-local function str_value(value)
+function AVCmds.str_value(value)
 	if type(value) == "table" then
 		local parts = {"{"}
 		for i, v in ipairs(value) do
-			table.insert(parts, ("%s,"):format(str_value(v)))
+			table.insert(parts, ("%s,"):format(AVCmds.str_value(v)))
 		end
 		for i, v in pairs(value) do
 			if type(i) ~= "number" or i > #parts then
 				if type(i) == "string" and i:match("^[a-z]%w*$") then
-					table.insert(parts, ("%s=%s,"):format(i, str_value(v)))
+					table.insert(parts, ("%s=%s,"):format(i, AVCmds.str_value(v)))
 				else
-					table.insert(parts, ("[%s]=%s,"):format(str_value(i), str_value(v)))
+					table.insert(parts, ("[%s]=%s,"):format(AVCmds.str_value(i), AVCmds.str_value(v)))
 				end
 			end
 		end
@@ -1914,14 +1914,14 @@ function AVCmds.toparts_context_tree(ctx, lines, depth)
 	if ctx.args and #ctx.args > 0 then
 		local args = {}
 		for _, arg in ipairs(ctx.args) do
-			table.insert(args, str_value(arg))
+			table.insert(args, AVCmds.str_value(arg))
 		end
 		for i, arg in pairs(ctx.args) do
 			if type(i) ~= "number" then
 				if type(i) == "string" then
-					table.insert(args, ("%s=%s"):format(i, str_value(arg)))
+					table.insert(args, ("%s=%s"):format(i, AVCmds.str_value(arg)))
 				else
-					table.insert(args, ("[%s]=%s"):format(str_value(i), str_value(arg)))
+					table.insert(args, ("[%s]=%s"):format(AVCmds.str_value(i), AVCmds.str_value(arg)))
 				end
 			end
 		end
