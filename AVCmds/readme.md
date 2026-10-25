@@ -26,7 +26,7 @@ AVCmds.createCommand {name="poke"}
 ```lua
 AVCmds.createCommand {name="test"}
 	:registerGlobalCommand()
-	-- ?foo
+	-- ?test foo
 	:addHandler {
 		AVCmds.const{"foo"},
 		---@param ctx AVCommandContext
@@ -35,9 +35,9 @@ AVCmds.createCommand {name="test"}
 		end
 	}
 	-- This handler will be checked before the one above, despite having the same first argument.
-	-- ?foo abc123
-	-- ?foo "quoted can have spaces"
-	-- ?foo 'or if you need a " you can use single quotes'
+	-- ?test foo abc123
+	-- ?test foo "quoted can have spaces"
+	-- ?test foo 'or if you need a " you can use single quotes'
 	:addHandler {
 		AVCmds.const{"foo"},
 		AVCmds.string(),
@@ -47,13 +47,13 @@ AVCmds.createCommand {name="test"}
 			AVCmds.response{ctx, "Foo!", s}
 		end
 	}
-	-- ?bar true
-	-- ?bar yes
-	-- ?bar no
-	-- ?bar y
-	-- ?bar n
-	-- ?bar 123456
-	-- ?bar -654321
+	-- ?test bar true
+	-- ?test bar yes
+	-- ?test bar no
+	-- ?test bar y
+	-- ?test bar n
+	-- ?test bar 123456
+	-- ?test bar -654321
 	:addHandler {
 		AVCmds.const{"bar"},
 		AVCmds.or_{AVCmds.boolean(), AVCmds.number()},
@@ -71,7 +71,6 @@ AVCmds.createCommand {name="test"}
 g_savedata = {}
 g_savedata.somedata = {123, "456", [123]="potato"}
 
-AVCmds._root_command = AVCmds.createCommand {name="ROOT"}
 AVCmds.createCommand {name="savedata"}
 	:registerGlobalCommand()
 	:addHandler {
@@ -97,8 +96,7 @@ AVCmds.createCommand {name="savedata"}
 				part[path[#path]] = value
 				prefix = "SET"
 			end
-			-- You can replace `tostring` with something that handles tables better.
-			local value_str = tostring(value)
+			local value_str = AVCmds.str_value(value)
 			local sep = (value_str:find("\n") or #value_str > 23) and "\n" or " "
 			AVCmds.response{ctx, prefix, path.raw, "=" .. sep .. value_str}
 		end
